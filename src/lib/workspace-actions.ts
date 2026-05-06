@@ -425,3 +425,59 @@ export async function createAgent(formData: FormData) {
   revalidateWorkspace(projectId);
   revalidatePath("/ai-organization");
 }
+
+export async function createGlobalAgent(formData: FormData) {
+  requireDatabase();
+
+  const name = text(formData, "name");
+  const team = text(formData, "team") || "RD";
+  const role = text(formData, "role") || `${team} Agent`;
+  const capabilities = text(formData, "capabilities");
+  const status = text(formData, "status") || "IDLE";
+
+  if (!name) {
+    throw new Error("Agent name is required.");
+  }
+
+  await prisma.agent.create({
+    data: {
+      name,
+      team,
+      role,
+      capabilities,
+      status: status as never,
+    },
+  });
+
+  revalidatePath("/ai-organization");
+  revalidatePath("/dashboard");
+}
+
+export async function updateGlobalAgent(formData: FormData) {
+  requireDatabase();
+
+  const agentId = text(formData, "agentId");
+  const name = text(formData, "name");
+  const team = text(formData, "team") || "RD";
+  const role = text(formData, "role") || `${team} Agent`;
+  const capabilities = text(formData, "capabilities");
+  const status = text(formData, "status") || "IDLE";
+
+  if (!agentId || !name) {
+    throw new Error("Agent id and name are required.");
+  }
+
+  await prisma.agent.update({
+    where: { id: agentId },
+    data: {
+      name,
+      team,
+      role,
+      capabilities,
+      status: status as never,
+    },
+  });
+
+  revalidatePath("/ai-organization");
+  revalidatePath("/dashboard");
+}
