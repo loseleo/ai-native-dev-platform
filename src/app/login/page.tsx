@@ -1,19 +1,24 @@
-import { AppShell } from "@/components/app-shell";
+import { AuthShell } from "@/components/auth-shell";
 import { LoginForm } from "@/components/login-form";
 import { Card, SectionHeader } from "@/components/ui";
-import { getPublicShellState } from "@/lib/guards";
+import { getSetupStatus } from "@/lib/setup";
+import { redirect } from "next/navigation";
 
 export default async function LoginPage() {
-  const shell = await getPublicShellState();
+  const setup = await getSetupStatus();
+
+  if (setup.databaseReady && !setup.initialized) {
+    redirect("/setup");
+  }
 
   return (
-    <AppShell user={shell.user} setupLabel={shell.demoMode ? "Demo mode" : "Login"}>
+    <AuthShell label="Boss Login">
       <div className="mx-auto max-w-xl space-y-6">
         <SectionHeader title="Boss Login" description="Auth.js Credentials 登录入口。Setup 完成后，Boss 使用首次启动时创建的账号进入平台。" />
         <Card className="p-5">
           <LoginForm />
         </Card>
       </div>
-    </AppShell>
+    </AuthShell>
   );
 }

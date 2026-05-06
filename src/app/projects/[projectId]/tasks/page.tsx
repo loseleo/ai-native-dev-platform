@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
-import { TaskMiniCard } from "@/components/lists";
-import { Card, SectionHeader } from "@/components/ui";
-import { byStatus, workflowStages } from "@/lib/data";
-import { createTask } from "@/lib/workspace-actions";
+import { CreateDialog } from "@/components/create-dialog";
+import { ActionButton, DataTable, ReadOnlyBanner, RowActions, SectionHeader, StatusBadge, TableShell } from "@/components/ui";
+import { workflowStages } from "@/lib/data";
+import { createTask, updateTaskStatus } from "@/lib/workspace-actions";
 import { getSetupStatus } from "@/lib/setup";
 import { getWorkspaceData } from "@/lib/workspace-repository";
 
@@ -13,11 +13,14 @@ export default async function TasksPage({ params }: { params: Promise<{ projectI
   if (!data.project) {
     notFound();
   }
+  const canWrite = setup.databaseReady;
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="Tasks" description="Jira-like Kanban 按 projectId 聚合，任务详情、owner、reviewer、deliverable 都保留项目上下文。" />
-      <Card className="p-4">
+      <SectionHeader title="Tasks" description="任务按 projectId 聚合，默认使用紧凑表格保留 owner、reviewer、deliverable 和状态流转。" />
+      {!canWrite ? <ReadOnlyBanner /> : null}
+      <div className="flex justify-end">
+        <CreateDialog title="Create Task" trigger="Add Task" disabled={!canWrite}>
         <form action={createTask} className="grid gap-3 xl:grid-cols-[1fr_140px_140px_140px_auto] xl:items-end">
           <input name="projectId" type="hidden" value={projectId} />
           <div>
@@ -57,27 +60,50 @@ export default async function TasksPage({ params }: { params: Promise<{ projectI
           <input name="status" type="hidden" value="Todo" />
           <input name="deliverable" type="hidden" value="Tracked workspace deliverable" />
           <input name="acceptance" type="hidden" value="Lead reviews and marks task done." />
-          <button disabled={!setup.databaseReady} className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400" type="submit">
+          <button disabled={!canWrite} className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400" type="submit">
             Add Task
           </button>
         </form>
-        {!setup.databaseReady ? <p className="mt-3 text-sm text-amber-700">未配置数据库时展示 demo seed 数据，真实任务写入会禁用。</p> : null}
-      </Card>
-      <div className="grid gap-4 xl:grid-cols-5">
-        {byStatus(data.tasks).map((column) => (
-          <Card key={column.status} className="min-h-72 bg-slate-50 p-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-800">{column.status}</h2>
-              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500">{column.tasks.length}</span>
-            </div>
-            <div className="mt-3 space-y-3">
-              {column.tasks.map((task) => (
-                <TaskMiniCard key={task.id} task={task} />
-              ))}
-            </div>
-          </Card>
-        ))}
+        </CreateDialog>
       </div>
+      <TableShell title="Task Board">
+        <DataTable
+          rows={data.tasks}
+          getKey={(task) => task.id}
+          columns={[
+            { header: "ID", cell: (task) => <span className="font-mono text-xs">{task.id}</span> },
+            {
+              header: "Task",
+              cell: (task) => (
+                <div>
+                  <p className="font-semibold text-slate-950">{task.title}</p>
+                  <p className="mt-1 line-clamp-1 text-xs text-slate-500">{task.deliverable}</p>
+                </div>
+              ),
+            },
+            { header: "Priority", cell: (task) => <StatusBadge value={task.priority} /> },
+            { header: "Status", cell: (task) => <StatusBadge value={task.status} /> },
+            { header: "Stage", cell: (task) => <StatusBadge value={task.stage} /> },
+            { header: "Team", cell: (task) => task.team },
+            { header: "Owner", cell: (task) => task.owner },
+            {
+              header: "Actions",
+              cell: (task) => (
+                <RowActions>
+                  {(["In Progress", "In Review", "Blocked", "Done"] as const).map((status) => (
+                    <form key={status} action={updateTaskStatus}>
+                      <input name="projectId" type="hidden" value={task.projectId} />
+                      <input name="taskId" type="hidden" value={task.id} />
+                      <input name="status" type="hidden" value={status} />
+                      <ActionButton disabled={!canWrite}>{status}</ActionButton>
+                    </form>
+                  ))}
+                </RowActions>
+              ),
+            },
+          ]}
+        />
+      </TableShell>
     </div>
   );
 }

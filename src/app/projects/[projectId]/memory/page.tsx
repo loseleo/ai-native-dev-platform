@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Badge, Card, SectionHeader } from "@/components/ui";
+import { Card, DataTable, SectionHeader, StatusBadge, TableShell } from "@/components/ui";
 import { getWorkspaceData } from "@/lib/workspace-repository";
 
 export default async function MemoryPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -23,20 +23,17 @@ export default async function MemoryPage({ params }: { params: Promise<{ project
             <p><strong className="text-slate-950">What new Agent should do first:</strong> Read PRD, open Tasks, then check Decisions.</p>
           </div>
         </Card>
-        <Card className="p-5">
-          <h2 className="text-lg font-semibold text-slate-950">Project Ledger</h2>
-          <div className="mt-4 space-y-4">
-            {data.ledgerEvents.map((event) => (
-              <div key={event.id} className="grid gap-3 border-l-2 border-cyan-200 pl-4 md:grid-cols-[70px_1fr]">
-                <Badge tone="info">{event.time}</Badge>
-                <div>
-                  <p className="font-semibold text-slate-950">{event.title}</p>
-                  <p className="mt-1 text-sm text-slate-600">{event.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <TableShell title="Project Ledger">
+          <DataTable
+            rows={data.ledgerEvents}
+            getKey={(event) => event.id}
+            columns={[
+              { header: "Time", cell: (event) => <StatusBadge value={event.time} /> },
+              { header: "Event", cell: (event) => <span className="font-semibold text-slate-950">{event.title}</span> },
+              { header: "Detail", cell: (event) => <span className="line-clamp-2 max-w-2xl">{event.detail}</span> },
+            ]}
+          />
+        </TableShell>
       </div>
     </div>
   );

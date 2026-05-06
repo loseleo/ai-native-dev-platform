@@ -1,13 +1,12 @@
-import { AppShell } from "@/components/app-shell";
+import { AuthShell } from "@/components/auth-shell";
 import { Badge, Card, SectionHeader } from "@/components/ui";
-import { getPublicShellState } from "@/lib/guards";
 import { completeSetup, getSetupStatus } from "@/lib/setup";
 
 export default async function SetupPage() {
-  const [status, shell] = await Promise.all([getSetupStatus(), getPublicShellState()]);
+  const status = await getSetupStatus();
 
   return (
-    <AppShell user={shell.user} setupLabel={status.initialized ? "Initialized" : "Setup"}>
+    <AuthShell label={status.initialized ? "Initialized" : "First-run Setup"}>
       <div className="space-y-6">
         <SectionHeader
           title="Setup"
@@ -108,6 +107,6 @@ export default async function SetupPage() {
           </form>
         </Card>
       </div>
-    </AppShell>
+    </AuthShell>
   );
 }

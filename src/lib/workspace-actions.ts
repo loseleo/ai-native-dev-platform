@@ -426,6 +426,41 @@ export async function createAgent(formData: FormData) {
   revalidatePath("/ai-organization");
 }
 
+export async function assignAgentToProject(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const agentId = text(formData, "agentId");
+
+  if (!projectId || !agentId) {
+    throw new Error("Project and agent are required.");
+  }
+
+  const agent = await prisma.agent.findUnique({ where: { id: agentId } });
+
+  if (!agent) {
+    throw new Error("Agent not found.");
+  }
+
+  await prisma.$transaction([
+    prisma.projectAgent.upsert({
+      where: { projectId_agentId: { projectId, agentId } },
+      update: {},
+      create: { projectId, agentId },
+    }),
+    prisma.ledgerEvent.create({
+      data: {
+        projectId,
+        title: "Agent assigned",
+        detail: `${agent.name} joined this Project Workspace as ${agent.role}.`,
+      },
+    }),
+  ]);
+
+  revalidateWorkspace(projectId, "agents");
+  revalidatePath("/ai-organization");
+}
+
 export async function createGlobalAgent(formData: FormData) {
   requireDatabase();
 
