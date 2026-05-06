@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  BOSS
+}
+
+enum ConfigScope {
+  LOCAL
+  ONLINE
+  VERCEL
+  SECURITY
+}
+
+enum ProjectType {
+  WEB
+}
+
+enum ProjectHealth {
+  HEALTHY
+  AT_RISK
+  BLOCKED
+}
+
+enum ProjectStage {
+  DRAFT
+  PRD_REVIEW
+  BOSS_PRD_APPROVAL
+  TECH_REVIEW
+  UI_UX_REVIEW
+  QA_CASE_REVIEW
+  DEVELOPMENT
+  CODE_REVIEW
+  QA_TESTING
+  BUG_FIXING
+  DEPLOYMENT
+  PM_ACCEPTANCE
+  BOSS_ACCEPTANCE
+  RELEASED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  BLOCKED
+  DONE
+  REJECTED
+  REOPENED
+}
+
+enum Priority {
+  P0
+  P1
+  P2
+  P3
+}
+
+enum AgentStatus {
+  DRAFT
+  IDLE
+  WORKING
+  PAUSED
+  BLOCKED
+  UPGRADING
+  DEPRECATED
+  SHUTDOWN
+  ERROR
+}
+
+enum DecisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_MORE_INFO
+  RESOLVED
+}
+
+enum BugStatus {
+  OPEN
+  FIXING
+  VERIFYING
+  CLOSED
+}
+
+enum ReviewResult {
+  PASS
+  NEEDS_CHANGE
+  PENDING
+}
+
+enum HandoverStatus {
+  DRAFT
+  READY
+  ACCEPTED
+  IN_REVIEW
+}
+
+enum DeploymentEnvironment {
+  PREVIEW
+  PRODUCTION
+}
+
+enum DeploymentStatus {
+  QUEUED
+  BUILDING
+  READY
+  FAILED
+}
+
+enum ArtifactStatus {
+  DRAFT
+  APPROVED
+  ARCHIVED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         UserRole @default(BOSS)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model SetupState {
+  id          String   @id @default(cuid())
+  initialized Boolean  @default(false)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SystemConfig {
+  id        String      @id @default(cuid())
+  scope     ConfigScope
+  key       String
+  value     String      @db.Text
+  encrypted Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([scope, key])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  type        ProjectType   @default(WEB)
+  stage       ProjectStage  @default(DRAFT)
+  health      ProjectHealth @default(HEALTHY)
+  progress    Int           @default(0)
+  goal        String        @db.Text
+  targetUsers String
+  repo        String?
+  previewUrl  String?
+  nextActions String        @db.Text
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tasks              Task[]
+  decisions          Decision[]
+  ledger             LedgerEvent[]
+  bugs               Bug[]
+  reviews            Review[]
+  knowledgeDocuments KnowledgeDocument[]
+  handovers          HandoverPackage[]
+  deployments        Deployment[]
+  artifacts          Artifact[]
+  projectAgents      ProjectAgent[]
+}
+
+model Task {
+  id         String      @id @default(cuid())
+  projectId  String
+  title      String
+  type       String
+  stage      ProjectStage
+  team       String
+  owner      String
+  reviewer   String?
+  status     TaskStatus  @default(TODO)
+  priority   Priority    @default(P2)
+  deliverable String?    @db.Text
+  acceptance  String?    @db.Text
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Decision {
+  id             String         @id @default(cuid())
+  projectId      String
+  title          String
+  raisedBy       String
+  owner          String
+  type           String
+  status         DecisionStatus @default(PENDING)
+  blocking       Boolean        @default(false)
+  recommendation String         @db.Text
+  impact         String         @db.Text
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model LedgerEvent {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  detail    String   @db.Text
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Agent {
+  id           String      @id @default(cuid())
+  name         String
+  team         String
+  role         String
+  status       AgentStatus @default(IDLE)
+  capabilities String      @db.Text
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  projectAgents ProjectAgent[]
+}
+
+model ProjectAgent {
+  projectId String
+  agentId   String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agent   Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, agentId])
+  @@index([agentId])
+}
+
+model Bug {
+  id           String    @id @default(cuid())
+  projectId    String
+  title        String
+  severity     Priority
+  status       BugStatus @default(OPEN)
+  owner        String
+  reproduction String    @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Review {
+  id        String       @id @default(cuid())
+  projectId String
+  type      String
+  owner     String
+  result    ReviewResult @default(PENDING)
+  summary   String       @db.Text
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model KnowledgeDocument {
+  id        String   @id @default(cuid())
+  projectId String
+  filename  String
+  title     String
+  summary   String   @db.Text
+  content   String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, filename])
+  @@index([projectId])
+}
+
+model HandoverPackage {
+  id        String         @id @default(cuid())
+  projectId String
+  fromAgent String
+  toAgent   String
+  status    HandoverStatus @default(DRAFT)
+  objective String         @db.Text
+  scope     String         @db.Text
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Deployment {
+  id          String                @id @default(cuid())
+  projectId   String
+  environment DeploymentEnvironment
+  status      DeploymentStatus      @default(QUEUED)
+  url         String
+  branch      String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Artifact {
+  id        String         @id @default(cuid())
+  projectId String
+  name      String
+  type      String
+  owner     String
+  status    ArtifactStatus @default(DRAFT)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
