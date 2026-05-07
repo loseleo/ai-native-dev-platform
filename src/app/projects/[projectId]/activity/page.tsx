@@ -43,8 +43,8 @@ export default async function ActivityPage({ params }: { params: Promise<{ proje
       id: agent.id,
       agent: agent.name,
       role: agent.role,
-      provider: "OpenAI",
-      model: "gpt-5.4",
+      provider: agent.provider,
+      model: agent.model,
       status: agent.status,
       tools: agent.capabilities.join(", "),
       currentTask: activeTask?.title ?? "Standing by",
@@ -74,11 +74,11 @@ export default async function ActivityPage({ params }: { params: Promise<{ proje
         <dl className="mt-4 grid gap-4 text-sm md:grid-cols-4">
           <div>
             <dt className="font-semibold text-slate-500">Provider</dt>
-            <dd className="mt-1 text-slate-900">OpenAI</dd>
+            <dd className="mt-1 text-slate-900">Per-agent</dd>
           </div>
           <div>
             <dt className="font-semibold text-slate-500">Default model</dt>
-            <dd className="mt-1 text-slate-900">gpt-5.4</dd>
+            <dd className="mt-1 text-slate-900">Provider default</dd>
           </div>
           <div>
             <dt className="font-semibold text-slate-500">Config version</dt>

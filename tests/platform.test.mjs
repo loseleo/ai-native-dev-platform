@@ -48,3 +48,22 @@ test("activity page includes runtime and ledger views", () => {
   assert.match(source, /Runtime Defaults/);
   assert.match(source, /Activity Timeline/);
 });
+
+test("project and agent schemas store delivery and model configuration", () => {
+  const postgresSchema = read("prisma/schema.postgres.prisma");
+  const mysqlSchema = read("prisma/schema.prisma");
+  const actions = read("src/lib/workspace-actions.ts");
+
+  for (const schema of [postgresSchema, mysqlSchema]) {
+    assert.match(schema, /gitProvider/);
+    assert.match(schema, /vercelProject/);
+    assert.match(schema, /databaseUrl/);
+    assert.match(schema, /provider\s+String\s+@default\("gpt"\)/);
+    assert.match(schema, /apiKey/);
+  }
+
+  assert.match(actions, /encryptedOptional/);
+  assert.match(actions, /gemini/);
+  assert.match(actions, /minimax/);
+  assert.match(actions, /claude/);
+});

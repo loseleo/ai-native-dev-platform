@@ -12,6 +12,7 @@ export default async function AiOrganizationPage() {
   const canWrite = setup.databaseReady && !shell.demoMode;
   const teams = ["PM", "RD", "QA", "UI/UX"] as const;
   const statuses = ["IDLE", "WORKING", "PAUSED", "BLOCKED", "UPGRADING"] as const;
+  const providers = ["gpt", "gemini", "minimax", "claude"] as const;
   const statusValue = {
     Idle: "IDLE",
     Working: "WORKING",
@@ -35,39 +36,61 @@ export default async function AiOrganizationPage() {
             trigger="Add Agent"
             disabled={!canWrite}
           >
-          <form action={createGlobalAgent} className="mt-4 grid gap-3 xl:grid-cols-[160px_120px_160px_1fr_140px_auto] xl:items-end">
-            <div>
-              <label className="text-sm font-semibold text-slate-700" htmlFor="name">Name</label>
-              <input id="name" name="name" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Atlas" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700" htmlFor="team">Team</label>
-              <select id="team" name="team" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500">
-                {teams.map((team) => <option key={team}>{team}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700" htmlFor="role">Role</label>
-              <input id="role" name="role" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="RD Agent" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700" htmlFor="capabilities">Capabilities</label>
-              <input id="capabilities" name="capabilities" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Next.js, Code Review, QA" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700" htmlFor="status">Status</label>
-              <select id="status" name="status" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500">
-                {statuses.map((status) => <option key={status}>{status}</option>)}
-              </select>
-            </div>
-            <button
-              disabled={!canWrite}
-              className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-              type="submit"
-            >
-              Add Agent
-            </button>
-          </form>
+            <form action={createGlobalAgent} className="mt-4 space-y-5">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div>
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="name">Name</label>
+                  <input id="name" name="name" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Atlas" />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="team">Team</label>
+                  <select id="team" name="team" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500">
+                    {teams.map((team) => <option key={team}>{team}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="role">Role</label>
+                  <input id="role" name="role" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="RD Agent" />
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[160px_1fr_1fr]">
+                <div>
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="provider">Provider</label>
+                  <select id="provider" name="provider" defaultValue="gpt" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500">
+                    {providers.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="model">Model</label>
+                  <input id="model" name="model" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="gpt-5.4 / gemini-2.5-pro / claude-sonnet-4.5" />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="apiKey">API Key</label>
+                  <input id="apiKey" name="apiKey" type="password" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Stored encrypted" />
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[1fr_160px]">
+                <div>
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="capabilities">Capabilities</label>
+                  <input id="capabilities" name="capabilities" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Next.js, Code Review, QA" />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="status">Status</label>
+                  <select id="status" name="status" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500">
+                    {statuses.map((status) => <option key={status}>{status}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  disabled={!canWrite}
+                  className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  type="submit"
+                >
+                  Add Agent
+                </button>
+              </div>
+            </form>
           </CreateDialog>
         </div>
         <TableShell title="Global Agent Pool" description="Agent inventory across PM/RD/QA/UIUX, with project membership shown as references.">
@@ -87,6 +110,29 @@ export default async function AiOrganizationPage() {
                       className="h-9 w-full rounded-md border border-slate-200 px-2 text-sm font-semibold text-slate-950 outline-none focus:border-cyan-500 disabled:bg-slate-50"
                     />
                   </form>
+                ),
+              },
+              {
+                header: "Provider",
+                cell: (agent) => (
+                  <div className="space-y-2">
+                    <select
+                      name="provider"
+                      form={`agent-${agent.id}`}
+                      defaultValue={agent.provider}
+                      disabled={!canWrite}
+                      className="block h-8 rounded-md border border-slate-200 px-2 text-xs outline-none focus:border-cyan-500 disabled:bg-slate-50"
+                    >
+                      {providers.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                    </select>
+                    <input
+                      name="model"
+                      form={`agent-${agent.id}`}
+                      defaultValue={agent.model}
+                      disabled={!canWrite}
+                      className="h-8 w-44 rounded-md border border-slate-200 px-2 text-xs outline-none focus:border-cyan-500 disabled:bg-slate-50"
+                    />
+                  </div>
                 ),
               },
               {
@@ -142,6 +188,22 @@ export default async function AiOrganizationPage() {
                     disabled={!canWrite}
                     className="min-h-16 w-72 rounded-md border border-slate-200 px-2 py-2 text-sm outline-none focus:border-cyan-500 disabled:bg-slate-50"
                   />
+                ),
+              },
+              {
+                header: "API Key",
+                cell: (agent) => (
+                  <div className="space-y-2">
+                    <StatusBadge value={agent.keyConfigured ? "Configured" : "Pending"} />
+                    <input
+                      name="apiKey"
+                      form={`agent-${agent.id}`}
+                      type="password"
+                      disabled={!canWrite}
+                      placeholder="Replace key"
+                      className="block h-8 w-36 rounded-md border border-slate-200 px-2 text-xs outline-none focus:border-cyan-500 disabled:bg-slate-50"
+                    />
+                  </div>
                 ),
               },
               { header: "Projects", cell: (agent) => agent.projectIds.length ? agent.projectIds.join(", ") : "Global pool" },

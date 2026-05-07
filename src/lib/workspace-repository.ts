@@ -116,6 +116,12 @@ function mapProject(project: {
   goal: string;
   targetUsers: string;
   repo: string | null;
+  gitProvider?: string | null;
+  gitBranch?: string | null;
+  vercelTeam?: string | null;
+  vercelProject?: string | null;
+  databaseProvider?: string | null;
+  databaseUrl?: string | null;
   previewUrl: string | null;
   nextActions: string;
 }): Project {
@@ -129,6 +135,12 @@ function mapProject(project: {
     goal: project.goal,
     targetUsers: project.targetUsers,
     repo: project.repo ?? "",
+    gitProvider: project.gitProvider ?? "GitHub",
+    gitBranch: project.gitBranch ?? "main",
+    vercelTeam: project.vercelTeam ?? "",
+    vercelProject: project.vercelProject ?? "",
+    databaseProvider: project.databaseProvider ?? "Supabase Postgres",
+    databaseConfigured: Boolean(project.databaseUrl),
     previewUrl: project.previewUrl ?? "",
     nextActions: safeJsonList(project.nextActions),
   };
@@ -196,6 +208,9 @@ function mapAgent(agent: {
   team: string;
   role: string;
   status: string;
+  provider?: string | null;
+  model?: string | null;
+  apiKey?: string | null;
   capabilities: string;
   projectAgents?: { projectId: string }[];
 }): Agent {
@@ -205,6 +220,9 @@ function mapAgent(agent: {
     team: agent.team as Agent["team"],
     role: agent.role,
     status: agentStatusToDisplay[agent.status] ?? "Idle",
+    provider: (agent.provider ?? "gpt") as Agent["provider"],
+    model: agent.model ?? "gpt-5.4",
+    keyConfigured: Boolean(agent.apiKey),
     capabilities: safeJsonList(agent.capabilities),
     projectIds: agent.projectAgents?.map((item) => item.projectId) ?? [],
   };

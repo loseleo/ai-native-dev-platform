@@ -235,34 +235,51 @@ export async function testVercelConnection() {
   const configs = await prisma.systemConfig.findMany({ where: { scope: "VERCEL" } });
   const byKey = new Map(configs.map((config) => [config.key, config.encrypted ? decryptSecret(config.value) : config.value]));
   const token = byKey.get("TOKEN");
+  const team = byKey.get("TEAM");
   const project = byKey.get("PROJECT");
 
   if (!token || !project) {
     throw new Error("Vercel TOKEN and PROJECT must be configured first.");
   }
 
-  const response = await fetch(`https://api.vercel.com/v9/projects/${encodeURIComponent(project)}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    cache: "no-store",
-  });
+  const attempts = [
+    `https://api.vercel.com/v9/projects/${encodeURIComponent(project)}`,
+    team ? `https://api.vercel.com/v9/projects/${encodeURIComponent(project)}?teamId=${encodeURIComponent(team)}` : "",
+    team ? `https://api.vercel.com/v9/projects/${encodeURIComponent(project)}?slug=${encodeURIComponent(team)}` : "",
+  ].filter(Boolean);
+
+  let ok = false;
+  let detail = "Connection failed before request.";
+
+  for (const url of attempts) {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    });
+
+    ok = response.ok;
+    detail = response.ok ? "Connection OK" : `Connection failed: ${response.status}`;
+
+    if (ok) {
+      break;
+    }
+  }
 
   await prisma.systemConfig.upsert({
     where: { scope_key: { scope: "VERCEL", key: "LAST_TEST_RESULT" } },
     update: {
-      value: encryptSecret(response.ok ? "Connection OK" : `Connection failed: ${response.status}`),
+      value: encryptSecret(detail),
       encrypted: true,
     },
     create: {
       scope: "VERCEL",
       key: "LAST_TEST_RESULT",
-      value: encryptSecret(response.ok ? "Connection OK" : `Connection failed: ${response.status}`),
+      value: encryptSecret(detail),
       encrypted: true,
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Vercel connection failed with status ${response.status}.`);
-  }
+  revalidatePath("/settings");
 }

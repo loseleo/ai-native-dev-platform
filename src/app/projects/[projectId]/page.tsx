@@ -92,6 +92,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                   {data.project.repo || "Open artifacts"}
                 </Link>
               </dd>
+              <dd className="mt-1 text-xs text-slate-500">{data.project.gitProvider} · {data.project.gitBranch}</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-slate-400">Preview</dt>
@@ -100,6 +101,12 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
                   {data.project.previewUrl || "Open deployments"}
                 </Link>
               </dd>
+              <dd className="mt-1 text-xs text-slate-500">{data.project.vercelProject || "Vercel project pending"} · {data.project.vercelTeam || "team pending"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase text-slate-400">Database</dt>
+              <dd className="mt-1 text-sm text-slate-700">{data.project.databaseProvider}</dd>
+              <dd className="mt-1 text-xs text-slate-500">{data.project.databaseConfigured ? "Connection URL configured" : "Connection URL pending"}</dd>
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase text-slate-400">Health</dt>
@@ -118,6 +125,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
             { header: "Agent", cell: (agent) => <Link href={`/projects/${projectId}/agents`} className="font-semibold text-slate-950 hover:text-cyan-700">{agent.name}</Link> },
             { header: "Team", cell: (agent) => <StatusBadge value={agent.team} /> },
             { header: "Role", cell: (agent) => agent.role },
+            { header: "Provider", cell: (agent) => `${agent.provider} / ${agent.model}` },
             { header: "Status", cell: (agent) => <StatusBadge value={agent.status} /> },
             { header: "Capabilities", cell: (agent) => <span className="line-clamp-1">{agent.capabilities.join(", ")}</span> },
           ]}

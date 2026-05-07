@@ -29,6 +29,12 @@ export type Project = {
   goal: string;
   targetUsers: string;
   repo: string;
+  gitProvider: string;
+  gitBranch: string;
+  vercelTeam: string;
+  vercelProject: string;
+  databaseProvider: string;
+  databaseConfigured: boolean;
   previewUrl: string;
   nextActions: string[];
 };
@@ -54,6 +60,9 @@ export type Agent = {
   team: "PM" | "RD" | "QA" | "UI/UX";
   role: string;
   status: AgentStatus;
+  provider: "gpt" | "gemini" | "minimax" | "claude";
+  model: string;
+  keyConfigured: boolean;
   capabilities: string[];
   projectIds: string[];
 };
@@ -162,6 +171,12 @@ export const projects: Project[] = [
     goal: "让 Boss 像管理一家 AI 软件公司一样管理 Web 项目交付。",
     targetUsers: "Founder, Product Lead, Engineering Manager",
     repo: "loseleo/ai-native-dev-platform",
+    gitProvider: "GitHub",
+    gitBranch: "main",
+    vercelTeam: "jingbos-projects",
+    vercelProject: "ai-native-dev-platform",
+    databaseProvider: "Supabase Postgres",
+    databaseConfigured: true,
     previewUrl: "https://ai-native-dev-platform.vercel.app",
     nextActions: ["Approve Tech trade-off", "Review QA case readiness", "Assign independent RD handover"],
   },
@@ -175,17 +190,23 @@ export const projects: Project[] = [
     goal: "重构客户门户的信息架构与自助服务体验。",
     targetUsers: "Enterprise customer admins",
     repo: "loseleo/customer-portal-refresh",
+    gitProvider: "GitHub",
+    gitBranch: "main",
+    vercelTeam: "",
+    vercelProject: "customer-portal-refresh",
+    databaseProvider: "Supabase Postgres",
+    databaseConfigured: false,
     previewUrl: "https://customer-portal-refresh.vercel.app",
     nextActions: ["Boss approve PRD scope", "Confirm out-of-scope list"],
   },
 ];
 
 export const agents: Agent[] = [
-  { id: "pm-lead", name: "Mira", team: "PM", role: "PM Lead", status: "Working", capabilities: ["PRD", "User Story", "Acceptance"], projectIds: ["web-os", "customer-portal"] },
-  { id: "rd-lead", name: "Kai", team: "RD", role: "RD Lead", status: "Working", capabilities: ["Architecture", "Code Review", "Branch Strategy"], projectIds: ["web-os"] },
-  { id: "rd-1", name: "Nova", team: "RD", role: "RD Agent", status: "Blocked", capabilities: ["Next.js", "Prisma", "API"], projectIds: ["web-os"] },
-  { id: "qa-lead", name: "Iris", team: "QA", role: "QA Lead", status: "Idle", capabilities: ["Test Strategy", "Bug Triage"], projectIds: ["web-os"] },
-  { id: "ux-lead", name: "Lena", team: "UI/UX", role: "UI/UX Lead", status: "Paused", capabilities: ["Design Review", "Interaction Flow"], projectIds: ["web-os", "customer-portal"] },
+  { id: "pm-lead", name: "Mira", team: "PM", role: "PM Lead", status: "Working", provider: "gpt", model: "gpt-5.4", keyConfigured: true, capabilities: ["PRD", "User Story", "Acceptance"], projectIds: ["web-os", "customer-portal"] },
+  { id: "rd-lead", name: "Kai", team: "RD", role: "RD Lead", status: "Working", provider: "claude", model: "claude-sonnet-4.5", keyConfigured: false, capabilities: ["Architecture", "Code Review", "Branch Strategy"], projectIds: ["web-os"] },
+  { id: "rd-1", name: "Nova", team: "RD", role: "RD Agent", status: "Blocked", provider: "gpt", model: "gpt-5.4", keyConfigured: true, capabilities: ["Next.js", "Prisma", "API"], projectIds: ["web-os"] },
+  { id: "qa-lead", name: "Iris", team: "QA", role: "QA Lead", status: "Idle", provider: "gemini", model: "gemini-2.5-pro", keyConfigured: false, capabilities: ["Test Strategy", "Bug Triage"], projectIds: ["web-os"] },
+  { id: "ux-lead", name: "Lena", team: "UI/UX", role: "UI/UX Lead", status: "Paused", provider: "minimax", model: "minimax-m1", keyConfigured: false, capabilities: ["Design Review", "Interaction Flow"], projectIds: ["web-os", "customer-portal"] },
 ];
 
 export const tasks: Task[] = [

@@ -161,6 +161,13 @@ model Project {
   goal        String
   targetUsers String
   repo        String?
+  gitProvider String        @default("GitHub")
+  gitBranch   String        @default("main")
+  vercelTeam  String?
+  vercelProject String?
+  databaseProvider String   @default("Supabase Postgres")
+  databaseUrl String?
+  databaseUrlEncrypted Boolean @default(true)
   previewUrl  String?
   nextActions String
   createdAt   DateTime      @default(now())
@@ -236,6 +243,10 @@ model Agent {
   team         String
   role         String
   status       AgentStatus @default(IDLE)
+  provider     String      @default("gpt")
+  model        String      @default("gpt-5.4")
+  apiKey       String?
+  apiKeyEncrypted Boolean  @default(true)
   capabilities String
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt

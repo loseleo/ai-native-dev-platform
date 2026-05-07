@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { encryptSecret, hasEncryptionKey } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { decisionStatusToDb, stageToDb, taskStatusToDb } from "@/lib/workspace-repository";
 import type { DecisionStatus, ProjectStage, TaskStatus } from "@/lib/data";
@@ -14,6 +15,42 @@ function requireDatabase() {
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
+}
+
+function encryptedOptional(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  if (!hasEncryptionKey()) {
+    throw new Error("APP_ENCRYPTION_KEY is required before saving database URLs or agent API keys.");
+  }
+
+  return encryptSecret(value);
+}
+
+const supportedAgentProviders = ["gpt", "gemini", "minimax", "claude"] as const;
+type SupportedAgentProvider = (typeof supportedAgentProviders)[number];
+
+const defaultModels: Record<SupportedAgentProvider, string> = {
+  gpt: "gpt-5.4",
+  gemini: "gemini-2.5-pro",
+  minimax: "minimax-m1",
+  claude: "claude-sonnet-4.5",
+};
+
+function agentProvider(formData: FormData) {
+  const provider = text(formData, "provider").toLowerCase();
+
+  if (supportedAgentProviders.includes(provider as SupportedAgentProvider)) {
+    return provider as SupportedAgentProvider;
+  }
+
+  return "gpt";
+}
+
+function agentModel(formData: FormData, provider: SupportedAgentProvider) {
+  return text(formData, "model") || defaultModels[provider];
 }
 
 function revalidateWorkspace(projectId: string, module?: string) {
@@ -35,10 +72,18 @@ export async function createProject(formData: FormData) {
   const repo = text(formData, "repo");
   const previewUrl = text(formData, "previewUrl");
   const nextActions = text(formData, "nextActions");
+  const gitProvider = text(formData, "gitProvider") || "GitHub";
+  const gitBranch = text(formData, "gitBranch") || "main";
+  const vercelTeam = text(formData, "vercelTeam");
+  const vercelProject = text(formData, "vercelProject") || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const databaseProvider = text(formData, "databaseProvider") || "Supabase Postgres";
+  const projectDatabaseUrl = text(formData, "projectDatabaseUrl");
 
   if (!name || !goal || !targetUsers) {
     throw new Error("Project name, goal, and target users are required.");
   }
+
+  const encryptedDatabaseUrl = encryptedOptional(projectDatabaseUrl);
 
   const project = await prisma.project.create({
     data: {
@@ -47,12 +92,29 @@ export async function createProject(formData: FormData) {
       targetUsers,
       repo,
       previewUrl,
+      gitProvider,
+      gitBranch,
+      vercelTeam: vercelTeam || null,
+      vercelProject: vercelProject || null,
+      databaseProvider,
+      databaseUrl: encryptedDatabaseUrl,
+      databaseUrlEncrypted: Boolean(encryptedDatabaseUrl),
       nextActions,
       progress: 5,
+      deployments: previewUrl
+        ? {
+            create: {
+              environment: "PREVIEW",
+              status: "READY",
+              url: previewUrl,
+              branch: gitBranch,
+            },
+          }
+        : undefined,
       ledger: {
         create: {
           title: "Project created",
-          detail: "Boss created a Web project from Projects.",
+          detail: `Boss created a Web project with ${gitProvider}, ${vercelProject ? "Vercel project configured" : "Vercel pending"}, and ${encryptedDatabaseUrl ? "database configured" : "database pending"}.`,
         },
       },
       tasks: {
@@ -96,10 +158,10 @@ export async function createProject(formData: FormData) {
   });
 
   const agents = [
-    { id: `pm-${project.id}`, name: "Mira", team: "PM", role: "PM Lead", status: "WORKING", capabilities: "PRD\nUser Story\nAcceptance" },
-    { id: `rd-${project.id}`, name: "Kai", team: "RD", role: "RD Lead", status: "IDLE", capabilities: "Architecture\nCode Review\nBranch Strategy" },
-    { id: `qa-${project.id}`, name: "Iris", team: "QA", role: "QA Lead", status: "IDLE", capabilities: "Test Strategy\nBug Triage" },
-    { id: `ux-${project.id}`, name: "Lena", team: "UI/UX", role: "UI/UX Lead", status: "IDLE", capabilities: "Design Review\nInteraction Flow" },
+    { id: `pm-${project.id}`, name: "Mira", team: "PM", role: "PM Lead", status: "WORKING", provider: "gpt", model: "gpt-5.4", capabilities: "PRD\nUser Story\nAcceptance" },
+    { id: `rd-${project.id}`, name: "Kai", team: "RD", role: "RD Lead", status: "IDLE", provider: "claude", model: "claude-sonnet-4.5", capabilities: "Architecture\nCode Review\nBranch Strategy" },
+    { id: `qa-${project.id}`, name: "Iris", team: "QA", role: "QA Lead", status: "IDLE", provider: "gemini", model: "gemini-2.5-pro", capabilities: "Test Strategy\nBug Triage" },
+    { id: `ux-${project.id}`, name: "Lena", team: "UI/UX", role: "UI/UX Lead", status: "IDLE", provider: "minimax", model: "minimax-m1", capabilities: "Design Review\nInteraction Flow" },
   ];
 
   for (const agent of agents) {
@@ -110,6 +172,8 @@ export async function createProject(formData: FormData) {
         team: agent.team,
         role: agent.role,
         status: agent.status as never,
+        provider: agent.provider,
+        model: agent.model,
         capabilities: agent.capabilities,
       },
       create: {
@@ -118,6 +182,8 @@ export async function createProject(formData: FormData) {
         team: agent.team,
         role: agent.role,
         status: agent.status as never,
+        provider: agent.provider,
+        model: agent.model,
         capabilities: agent.capabilities,
         projectAgents: {
           create: { projectId: project.id },
@@ -411,15 +477,30 @@ export async function createAgent(formData: FormData) {
   const team = text(formData, "team") || "RD";
   const role = text(formData, "role") || `${team} Agent`;
   const capabilities = text(formData, "capabilities");
+  const provider = agentProvider(formData);
+  const model = agentModel(formData, provider);
+  const apiKey = encryptedOptional(text(formData, "apiKey"));
 
   if (!projectId || !name) {
     throw new Error("Project and agent name are required.");
   }
 
   await prisma.$transaction(async (tx) => {
-    const agent = await tx.agent.create({ data: { name, team, role, capabilities, status: "IDLE" } });
+    const agent = await tx.agent.create({
+      data: {
+        name,
+        team,
+        role,
+        capabilities,
+        status: "IDLE",
+        provider,
+        model,
+        apiKey,
+        apiKeyEncrypted: Boolean(apiKey),
+      },
+    });
     await tx.projectAgent.create({ data: { projectId, agentId: agent.id } });
-    await tx.ledgerEvent.create({ data: { projectId, title: "Agent joined", detail: `${name} joined as ${role}.` } });
+    await tx.ledgerEvent.create({ data: { projectId, title: "Agent joined", detail: `${name} joined as ${role} using ${provider}/${model}.` } });
   });
 
   revalidateWorkspace(projectId);
@@ -469,6 +550,9 @@ export async function createGlobalAgent(formData: FormData) {
   const role = text(formData, "role") || `${team} Agent`;
   const capabilities = text(formData, "capabilities");
   const status = text(formData, "status") || "IDLE";
+  const provider = agentProvider(formData);
+  const model = agentModel(formData, provider);
+  const apiKey = encryptedOptional(text(formData, "apiKey"));
 
   if (!name) {
     throw new Error("Agent name is required.");
@@ -481,6 +565,10 @@ export async function createGlobalAgent(formData: FormData) {
       role,
       capabilities,
       status: status as never,
+      provider,
+      model,
+      apiKey,
+      apiKeyEncrypted: Boolean(apiKey),
     },
   });
 
@@ -497,10 +585,20 @@ export async function updateGlobalAgent(formData: FormData) {
   const role = text(formData, "role") || `${team} Agent`;
   const capabilities = text(formData, "capabilities");
   const status = text(formData, "status") || "IDLE";
+  const provider = agentProvider(formData);
+  const model = agentModel(formData, provider);
+  const rawApiKey = text(formData, "apiKey");
 
   if (!agentId || !name) {
     throw new Error("Agent id and name are required.");
   }
+
+  const apiKeyUpdate = rawApiKey
+    ? {
+        apiKey: encryptedOptional(rawApiKey),
+        apiKeyEncrypted: true,
+      }
+    : {};
 
   await prisma.agent.update({
     where: { id: agentId },
@@ -510,6 +608,9 @@ export async function updateGlobalAgent(formData: FormData) {
       role,
       capabilities,
       status: status as never,
+      provider,
+      model,
+      ...apiKeyUpdate,
     },
   });
 
