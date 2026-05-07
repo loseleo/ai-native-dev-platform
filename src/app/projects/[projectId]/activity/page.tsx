@@ -36,22 +36,6 @@ export default async function ActivityPage({ params }: { params: Promise<{ proje
     notFound();
   }
 
-  const agentRuns = data.agents.map((agent) => {
-    const activeTask = data.tasks.find((task) => task.owner === agent.name && task.status !== "Done");
-
-    return {
-      id: agent.id,
-      agent: agent.name,
-      role: agent.role,
-      provider: agent.provider,
-      model: agent.model,
-      status: agent.status,
-      tools: agent.capabilities.join(", "),
-      currentTask: activeTask?.title ?? "Standing by",
-      lastResult: activeTask ? `${activeTask.status}: ${activeTask.deliverable}` : "No active run",
-    };
-  });
-
   const activity = data.ledgerEvents.map((event) => ({
     ...event,
     type: classifyEvent(event.title),
@@ -65,8 +49,8 @@ export default async function ActivityPage({ params }: { params: Promise<{ proje
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Agents" value={String(data.agents.length)} detail="Assigned to this workspace" tone="info" />
-        <StatCard label="Working" value={String(data.agents.filter((agent) => agent.status === "Working").length)} detail="Currently active workers" tone="good" />
-        <StatCard label="Blocked Runs" value={String(data.agents.filter((agent) => agent.status === "Blocked").length)} detail="Need Boss or lead action" tone="bad" />
+        <StatCard label="Runs" value={String(data.agentRuns.length)} detail="Real AI delivery runs" tone="good" />
+        <StatCard label="Blocked Runs" value={String(data.agentRuns.filter((run) => run.status === "Blocked" || run.status === "Failed").length)} detail="Need Boss or setup action" tone="bad" />
         <StatCard label="Ledger Events" value={String(data.ledgerEvents.length)} detail="Tracked project memory entries" tone="warn" />
       </div>
       <Card className="p-5">
@@ -90,18 +74,32 @@ export default async function ActivityPage({ params }: { params: Promise<{ proje
           </div>
         </dl>
       </Card>
-      <TableShell title="Agent Run Log" description="Derived from project members, capabilities, and assigned tasks.">
+      <TableShell title="Agent Run Log" description="Real Requirement → AgentRun records, including approval gates and execution errors.">
         <DataTable
-          rows={agentRuns}
+          rows={data.agentRuns}
           getKey={(run) => run.id}
           columns={[
-            { header: "Agent", cell: (run) => <span className="font-semibold text-slate-950">{run.agent}</span> },
-            { header: "Role", cell: (run) => run.role },
+            { header: "Run", cell: (run) => <span className="font-mono text-xs">{run.id}</span> },
+            { header: "Agent", cell: (run) => <span className="font-semibold text-slate-950">{run.agentName}</span> },
+            { header: "Type", cell: (run) => <StatusBadge value={run.type} /> },
             { header: "Model", cell: (run) => `${run.provider} / ${run.model}` },
             { header: "Status", cell: (run) => <StatusBadge value={run.status} /> },
-            { header: "Current Task", cell: (run) => <span className="line-clamp-1 max-w-xl">{run.currentTask}</span> },
-            { header: "Last Result", cell: (run) => <span className="line-clamp-2 max-w-xl">{run.lastResult}</span> },
-            { header: "Tools", cell: (run) => <span className="line-clamp-1 max-w-xl">{run.tools || "No tools configured"}</span> },
+            { header: "Input", cell: (run) => <span className="line-clamp-1 max-w-xl">{run.input}</span> },
+            { header: "Output", cell: (run) => <span className="line-clamp-2 max-w-xl">{run.error || run.output || "Pending"}</span> },
+            { header: "Created", cell: (run) => <StatusBadge value={run.createdAt} /> },
+          ]}
+        />
+      </TableShell>
+      <TableShell title="Run Steps" description="Step-level trace for planning, code generation, PR approval, deployment sync, and acceptance.">
+        <DataTable
+          rows={data.agentRunSteps}
+          getKey={(step) => step.id}
+          columns={[
+            { header: "Run", cell: (step) => <span className="font-mono text-xs">{step.runId}</span> },
+            { header: "Step", cell: (step) => <span className="font-semibold text-slate-950">{step.name}</span> },
+            { header: "Status", cell: (step) => <StatusBadge value={step.status} /> },
+            { header: "Detail", cell: (step) => <span className="line-clamp-2 max-w-3xl">{step.error || step.output || step.detail}</span> },
+            { header: "Created", cell: (step) => <StatusBadge value={step.createdAt} /> },
           ]}
         />
       </TableShell>

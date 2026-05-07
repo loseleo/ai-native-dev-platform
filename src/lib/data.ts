@@ -105,6 +105,58 @@ export type LedgerEvent = {
   time: string;
   title: string;
   detail: string;
+  objectType?: string;
+  objectId?: string;
+};
+
+export type Requirement = {
+  id: string;
+  projectId: string;
+  title: string;
+  prompt: string;
+  targetUsers: string;
+  scope: string;
+  acceptance: string;
+  techPreference: string;
+  status: "Draft" | "Planned" | "Approved" | "Code Ready" | "PR Ready" | "Deployed" | "Accepted" | "Blocked";
+};
+
+export type AgentRun = {
+  id: string;
+  projectId: string;
+  requirementId: string;
+  agentName: string;
+  type: "Plan" | "Code" | "PR" | "Deploy" | "QA";
+  status: "Queued" | "Running" | "Waiting Approval" | "Completed" | "Failed" | "Blocked";
+  provider: string;
+  model: string;
+  input: string;
+  output: string;
+  error: string;
+  createdAt: string;
+};
+
+export type AgentRunStep = {
+  id: string;
+  runId: string;
+  name: string;
+  status: "Queued" | "Running" | "Completed" | "Failed" | "Blocked";
+  detail: string;
+  output: string;
+  error: string;
+  createdAt: string;
+};
+
+export type CodeChange = {
+  id: string;
+  projectId: string;
+  requirementId: string;
+  runId: string;
+  branch: string;
+  commitSha: string;
+  prUrl: string;
+  summary: string;
+  status: "Planned" | "Approved" | "Generated" | "PR Ready" | "Blocked" | "Merged";
 };
 
 export type KnowledgeDoc = {
@@ -132,6 +184,10 @@ export type Deployment = {
   status: "Queued" | "Building" | "Ready" | "Failed";
   url: string;
   branch: string;
+  vercelDeploymentId?: string;
+  sourceRunId?: string;
+  buildStatus?: string;
+  logsUrl?: string;
 };
 
 export type Artifact = {
@@ -264,6 +320,56 @@ export const deployments: Deployment[] = [
   { id: "DEP-2", projectId: "web-os", environment: "Production", status: "Queued", url: "https://ai-native-dev-platform.vercel.app", branch: "main" },
 ];
 
+export const requirements: Requirement[] = [
+  {
+    id: "REQ-1",
+    projectId: "web-os",
+    title: "Todolist web app delivery",
+    prompt: "Build a todolist website with add, complete, delete, and filter.",
+    targetUsers: "Solo operators and small teams",
+    scope: "Next.js app with local task state, responsive table/list UI, empty state, and basic filters.",
+    acceptance: "User can add todos, complete todos, delete todos, and filter all/active/completed.",
+    techPreference: "Next.js + Tailwind + TypeScript",
+    status: "Planned",
+  },
+];
+
+export const agentRuns: AgentRun[] = [
+  {
+    id: "RUN-1",
+    projectId: "web-os",
+    requirementId: "REQ-1",
+    agentName: "Mira",
+    type: "Plan",
+    status: "Waiting Approval",
+    provider: "gpt",
+    model: "gpt-5.4",
+    input: "Todolist web app delivery",
+    output: "PRD, task breakdown, technical plan, and QA checklist generated for Boss approval.",
+    error: "",
+    createdAt: "09:30",
+  },
+];
+
+export const agentRunSteps: AgentRunStep[] = [
+  { id: "STEP-1", runId: "RUN-1", name: "PRD draft", status: "Completed", detail: "PM Agent drafted PRD from requirement.", output: "PRD artifact ready.", error: "", createdAt: "09:31" },
+  { id: "STEP-2", runId: "RUN-1", name: "Boss approval gate", status: "Queued", detail: "Waiting for Boss to approve the plan before code generation.", output: "", error: "", createdAt: "09:33" },
+];
+
+export const codeChanges: CodeChange[] = [
+  {
+    id: "CHG-1",
+    projectId: "web-os",
+    requirementId: "REQ-1",
+    runId: "RUN-1",
+    branch: "ai/req-1-todolist-web-app-delivery",
+    commitSha: "",
+    prUrl: "",
+    summary: "Planned files for todolist implementation.",
+    status: "Planned",
+  },
+];
+
 export const artifacts: Artifact[] = [
   { id: "ART-1", projectId: "web-os", name: "AI Native Dev Platform PRD", type: "PRD", owner: "Mira", status: "Approved" },
   { id: "ART-2", projectId: "web-os", name: "Workspace IA Design Notes", type: "Design", owner: "Lena", status: "Approved" },
@@ -283,6 +389,10 @@ export function getProjectData(projectId: string) {
     bugs: bugs.filter((bug) => bug.projectId === projectId),
     reviews: reviews.filter((review) => review.projectId === projectId),
     ledgerEvents: ledgerEvents.filter((event) => event.projectId === projectId),
+    requirements: requirements.filter((requirement) => requirement.projectId === projectId),
+    agentRuns: agentRuns.filter((run) => run.projectId === projectId),
+    agentRunSteps: agentRunSteps.filter((step) => agentRuns.some((run) => run.projectId === projectId && run.id === step.runId)),
+    codeChanges: codeChanges.filter((change) => change.projectId === projectId),
     knowledgeDocs: knowledgeDocs.filter((doc) => doc.projectId === projectId),
     handovers: handovers.filter((handover) => handover.projectId === projectId),
     deployments: deployments.filter((deployment) => deployment.projectId === projectId),

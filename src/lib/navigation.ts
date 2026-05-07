@@ -10,6 +10,7 @@ export const globalNavItems = [
 
 export const workspaceNavItems = [
   { href: "", label: "Overview", hint: "Snapshot and workflow" },
+  { href: "/requirements", label: "Requirements", hint: "AI delivery intake" },
   { href: "/tasks", label: "Tasks", hint: "Delivery work" },
   { href: "/bugs", label: "Bugs", hint: "QA issue tracking" },
   { href: "/reviews", label: "Reviews", hint: "Quality gates" },

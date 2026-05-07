@@ -44,6 +44,18 @@ export default async function ArtifactsPage({ params }: { params: Promise<{ proj
           ]}
         />
       </TableShell>
+      <TableShell title="AI Code Change Packages" description="AI generated code plans, protected PR packages, and GitHub approval state.">
+        <DataTable
+          rows={data.codeChanges}
+          getKey={(change) => change.id}
+          columns={[
+            { header: "Branch", cell: (change) => <span className="font-mono text-xs">{change.branch}</span> },
+            { header: "Status", cell: (change) => <StatusBadge value={change.status} /> },
+            { header: "PR", cell: (change) => change.prUrl ? <span className="break-all text-cyan-700">{change.prUrl}</span> : "Pending" },
+            { header: "Summary", cell: (change) => <span className="line-clamp-2 max-w-3xl">{change.summary}</span> },
+          ]}
+        />
+      </TableShell>
     </div>
   );
 }

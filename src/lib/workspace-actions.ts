@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { buildCodePatchSummary, generateStructured } from "@/lib/ai-delivery";
 import { encryptSecret, hasEncryptionKey } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { decisionStatusToDb, stageToDb, taskStatusToDb } from "@/lib/workspace-repository";
@@ -127,6 +128,454 @@ function revalidateWorkspace(projectId: string, module?: string) {
   if (module) {
     revalidatePath(`/projects/${projectId}/${module}`);
   }
+}
+
+async function pickProjectAgent(projectId: string, team: string) {
+  const membership = await prisma.projectAgent.findFirst({
+    where: { projectId, agent: { team } },
+    include: { agent: true },
+  });
+
+  return membership?.agent ?? null;
+}
+
+async function getProviderApiKey(agent: { apiKey: string | null; provider: string } | null) {
+  if (agent?.apiKey) {
+    return agent.apiKey;
+  }
+
+  const provider = agent?.provider?.toUpperCase() || "GPT";
+  const config = await prisma.systemConfig.findUnique({
+    where: { scope_key: { scope: "AI_PROVIDER", key: `${provider}_API_KEY` } },
+  });
+
+  return config?.value ?? null;
+}
+
+async function createBlockingDecision(projectId: string, title: string, detail: string) {
+  await prisma.decision.create({
+    data: {
+      projectId,
+      title,
+      raisedBy: "System",
+      owner: "Boss",
+      type: "Execution block",
+      status: "PENDING",
+      blocking: true,
+      recommendation: detail,
+      impact: "AI delivery cannot continue until this setup issue is resolved.",
+    },
+  });
+}
+
+export async function createRequirementFromPrompt(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const title = text(formData, "title");
+  const prompt = text(formData, "prompt");
+  const targetUsers = text(formData, "targetUsers") || "Web users";
+  const scope = text(formData, "scope") || "MVP web delivery";
+  const acceptance = text(formData, "acceptance") || "Core workflow works end to end.";
+  const techPreference = text(formData, "techPreference") || "Next.js + Tailwind CSS + TypeScript";
+
+  if (!projectId || !title || !prompt) {
+    throw new Error("Project, requirement title, and prompt are required.");
+  }
+
+  const agent = await pickProjectAgent(projectId, "PM");
+
+  await prisma.$transaction(async (tx) => {
+    const requirement = await tx.requirement.create({
+      data: {
+        projectId,
+        title,
+        prompt,
+        targetUsers,
+        scope,
+        acceptance,
+        techPreference,
+        status: "DRAFT",
+      },
+    });
+
+    const run = await tx.agentRun.create({
+      data: {
+        projectId,
+        requirementId: requirement.id,
+        agentId: agent?.id,
+        type: "PLAN",
+        status: "QUEUED",
+        provider: agent?.provider ?? "gpt",
+        model: agent?.model ?? "gpt-5.4",
+        input: prompt,
+      },
+    });
+
+    await tx.agentRunStep.create({
+      data: {
+        runId: run.id,
+        name: "Requirement captured",
+        status: "COMPLETED",
+        detail: "Boss submitted a web requirement and queued AI planning.",
+      },
+    });
+
+    await tx.ledgerEvent.create({
+      data: {
+        projectId,
+        title: "Requirement created",
+        detail: `${title} queued for AI delivery planning.`,
+        objectType: "Requirement",
+        objectId: requirement.id,
+      },
+    });
+  });
+
+  revalidateWorkspace(projectId, "requirements");
+  revalidateWorkspace(projectId, "activity");
+  redirect(`/projects/${projectId}/requirements`);
+}
+
+export async function planRequirementWithAI(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const requirementId = text(formData, "requirementId");
+
+  const requirement = await prisma.requirement.findUnique({ where: { id: requirementId } });
+
+  if (!projectId || !requirement || requirement.projectId !== projectId) {
+    throw new Error("Requirement not found for this project.");
+  }
+
+  const agent = await pickProjectAgent(projectId, "PM");
+  const run = await prisma.agentRun.create({
+    data: {
+      projectId,
+      requirementId,
+      agentId: agent?.id,
+      type: "PLAN",
+      status: "RUNNING",
+      provider: agent?.provider ?? "gpt",
+      model: agent?.model ?? "gpt-5.4",
+      input: requirement.prompt,
+    },
+  });
+
+  try {
+    if (!agent) {
+      throw new Error("No PM Agent assigned to this project.");
+    }
+
+    const apiKey = await getProviderApiKey(agent);
+
+    if (!apiKey) {
+      throw new Error("No PM Agent or global provider API key configured.");
+    }
+
+    await prisma.agentRunStep.create({
+      data: { runId: run.id, name: "AI planning", status: "RUNNING", detail: "Generating PRD, tasks, technical plan, code plan, and QA checklist." },
+    });
+
+    const plan = await generateStructured({
+      provider: agent.provider,
+      model: agent.model,
+      apiKey,
+      system: "You are an AI PM/RD/QA delivery team for a Web project.",
+      prompt: [requirement.title, requirement.prompt, requirement.scope, requirement.acceptance, requirement.techPreference].join("\n"),
+      schema: "Return PRD, tasks, technical plan, code plan, QA checklist, deployment summary.",
+    });
+    const change = buildCodePatchSummary(requirement.title, plan.codePlan);
+
+    await prisma.$transaction([
+      prisma.requirement.update({ where: { id: requirementId }, data: { status: "PLANNED" } }),
+      prisma.agentRun.update({ where: { id: run.id }, data: { status: "WAITING_APPROVAL", output: JSON.stringify(plan, null, 2) } }),
+      prisma.agentRunStep.create({
+        data: {
+          runId: run.id,
+          name: "Delivery plan generated",
+          status: "COMPLETED",
+          detail: "AI generated PRD, tasks, technical plan, code plan, and QA checklist.",
+          output: JSON.stringify(plan, null, 2),
+        },
+      }),
+      ...plan.tasks.map((task) =>
+        prisma.task.create({
+          data: {
+            projectId,
+            title: task.title,
+            type: task.team === "QA" ? "Testing" : task.team === "PM" ? "PRD" : "Development",
+            stage: task.team === "QA" ? "QA_CASE_REVIEW" : task.team === "PM" ? "PRD_REVIEW" : "DEVELOPMENT",
+            team: task.team,
+            owner: task.owner,
+            reviewer: "Boss",
+            status: "TODO",
+            priority: task.priority as never,
+            deliverable: task.deliverable,
+            acceptance: task.acceptance,
+          },
+        }),
+      ),
+      prisma.knowledgeDocument.upsert({
+        where: { projectId_filename: { projectId, filename: `requirements-${requirementId}.md` } },
+        update: { title: `${requirement.title} PRD`, summary: plan.prd, content: JSON.stringify(plan, null, 2) },
+        create: { projectId, filename: `requirements-${requirementId}.md`, title: `${requirement.title} PRD`, summary: plan.prd, content: JSON.stringify(plan, null, 2) },
+      }),
+      prisma.artifact.create({ data: { projectId, name: `${requirement.title} PRD`, type: "PRD", owner: agent.name, status: "DRAFT" } }),
+      prisma.artifact.create({ data: { projectId, name: `${requirement.title} QA checklist`, type: "QA Report", owner: "Iris", status: "DRAFT" } }),
+      prisma.codeChange.create({
+        data: {
+          projectId,
+          requirementId,
+          runId: run.id,
+          branch: change.branch,
+          summary: change.summary,
+          status: "PLANNED",
+        },
+      }),
+      prisma.decision.create({
+        data: {
+          projectId,
+          title: `Approve AI delivery plan: ${requirement.title}`,
+          raisedBy: agent.name,
+          owner: "Boss",
+          type: "AI delivery approval",
+          status: "PENDING",
+          blocking: true,
+          recommendation: "Approve the generated PRD, task breakdown, technical plan, code plan, and QA checklist before code generation.",
+          impact: "Code generation and GitHub PR creation remain blocked until approved.",
+        },
+      }),
+      prisma.ledgerEvent.create({
+        data: {
+          projectId,
+          title: "AI delivery plan generated",
+          detail: `${agent.name} generated plan for ${requirement.title}; waiting for Boss approval.`,
+          objectType: "AgentRun",
+          objectId: run.id,
+        },
+      }),
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "AI planning failed.";
+
+    await prisma.$transaction([
+      prisma.requirement.update({ where: { id: requirementId }, data: { status: "BLOCKED" } }),
+      prisma.agentRun.update({ where: { id: run.id }, data: { status: "BLOCKED", error: message } }),
+      prisma.agentRunStep.create({ data: { runId: run.id, name: "AI planning blocked", status: "BLOCKED", detail: message, error: message } }),
+      prisma.ledgerEvent.create({ data: { projectId, title: "AI delivery blocked", detail: message, objectType: "AgentRun", objectId: run.id } }),
+    ]);
+    await createBlockingDecision(projectId, `Configure PM Agent key for ${requirement.title}`, message);
+  }
+
+  revalidateWorkspace(projectId, "requirements");
+  revalidateWorkspace(projectId, "activity");
+  revalidateWorkspace(projectId, "tasks");
+  revalidateWorkspace(projectId, "knowledge");
+  revalidateWorkspace(projectId, "artifacts");
+  revalidateWorkspace(projectId, "decisions");
+}
+
+export async function approveRunPlan(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const requirementId = text(formData, "requirementId");
+
+  await prisma.$transaction([
+    prisma.requirement.update({ where: { id: requirementId }, data: { status: "APPROVED" } }),
+    prisma.codeChange.updateMany({ where: { projectId, requirementId }, data: { status: "APPROVED" } }),
+    prisma.decision.updateMany({
+      where: { projectId, title: { contains: `Approve AI delivery plan` }, status: "PENDING" },
+      data: { status: "APPROVED", blocking: false },
+    }),
+    prisma.ledgerEvent.create({
+      data: { projectId, title: "AI delivery plan approved", detail: `${requirementId} approved for code generation.`, objectType: "Requirement", objectId: requirementId },
+    }),
+  ]);
+
+  revalidateWorkspace(projectId, "requirements");
+  revalidateWorkspace(projectId, "decisions");
+  revalidateWorkspace(projectId, "activity");
+}
+
+export async function generateCodePatch(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const requirementId = text(formData, "requirementId");
+  const requirement = await prisma.requirement.findUnique({ where: { id: requirementId } });
+
+  if (!requirement || requirement.status !== "APPROVED") {
+    throw new Error("Boss must approve the delivery plan before code generation.");
+  }
+
+  const agent = await pickProjectAgent(projectId, "RD");
+  const run = await prisma.agentRun.create({
+    data: {
+      projectId,
+      requirementId,
+      agentId: agent?.id,
+      type: "CODE",
+      status: "RUNNING",
+      provider: agent?.provider ?? "gpt",
+      model: agent?.model ?? "gpt-5.4",
+      input: requirement.prompt,
+    },
+  });
+
+  try {
+    if (!agent) {
+      throw new Error("No RD Agent assigned to this project.");
+    }
+
+    const apiKey = await getProviderApiKey(agent);
+
+    if (!apiKey) {
+      throw new Error("No RD Agent or global provider API key configured.");
+    }
+
+    const plan = await generateStructured({
+      provider: agent.provider,
+      model: agent.model,
+      apiKey,
+      system: "You are an AI RD Agent producing a reviewed code patch plan for a Next.js app.",
+      prompt: `${requirement.title}\n${requirement.prompt}\n${requirement.acceptance}`,
+      schema: "Return code plan and implementation summary.",
+    });
+    const change = buildCodePatchSummary(requirement.title, plan.codePlan);
+
+    await prisma.$transaction([
+      prisma.requirement.update({ where: { id: requirementId }, data: { status: "CODE_READY" } }),
+      prisma.agentRun.update({ where: { id: run.id }, data: { status: "WAITING_APPROVAL", output: change.summary } }),
+      prisma.agentRunStep.create({ data: { runId: run.id, name: "Code patch generated", status: "COMPLETED", detail: "AI generated code change plan for Boss approval.", output: change.summary } }),
+      prisma.codeChange.updateMany({ where: { projectId, requirementId }, data: { runId: run.id, branch: change.branch, summary: change.summary, status: "GENERATED" } }),
+      prisma.artifact.create({ data: { projectId, name: `${requirement.title} code patch plan`, type: "Code Note", owner: agent.name, status: "DRAFT" } }),
+      prisma.decision.create({
+        data: {
+          projectId,
+          title: `Approve GitHub PR creation: ${requirement.title}`,
+          raisedBy: agent.name,
+          owner: "Boss",
+          type: "Code write approval",
+          status: "PENDING",
+          blocking: true,
+          recommendation: `Approve creating a GitHub delivery branch ${change.branch} and PR from the generated patch plan.`,
+          impact: "No repository write happens before this approval.",
+        },
+      }),
+      prisma.ledgerEvent.create({ data: { projectId, title: "AI code patch generated", detail: `${agent.name} generated a code patch plan for ${requirement.title}.`, objectType: "AgentRun", objectId: run.id } }),
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Code generation failed.";
+    await prisma.$transaction([
+      prisma.requirement.update({ where: { id: requirementId }, data: { status: "BLOCKED" } }),
+      prisma.agentRun.update({ where: { id: run.id }, data: { status: "BLOCKED", error: message } }),
+      prisma.agentRunStep.create({ data: { runId: run.id, name: "Code generation blocked", status: "BLOCKED", detail: message, error: message } }),
+      prisma.ledgerEvent.create({ data: { projectId, title: "Code generation blocked", detail: message, objectType: "AgentRun", objectId: run.id } }),
+    ]);
+    await createBlockingDecision(projectId, `Configure RD Agent key for ${requirement.title}`, message);
+  }
+
+  revalidateWorkspace(projectId, "requirements");
+  revalidateWorkspace(projectId, "activity");
+  revalidateWorkspace(projectId, "artifacts");
+  revalidateWorkspace(projectId, "decisions");
+}
+
+export async function approveAndCreatePullRequest(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const requirementId = text(formData, "requirementId");
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const change = await prisma.codeChange.findFirst({ where: { projectId, requirementId }, orderBy: { updatedAt: "desc" } });
+
+  if (!project || !change) {
+    throw new Error("Project and code change are required.");
+  }
+
+  if (!project.repo || !process.env.GITHUB_TOKEN) {
+    const detail = !project.repo ? "Project repository is not configured." : "GITHUB_TOKEN is not configured for protected PR creation.";
+    await prisma.$transaction([
+      prisma.codeChange.update({ where: { id: change.id }, data: { status: "BLOCKED" } }),
+      prisma.ledgerEvent.create({ data: { projectId, title: "GitHub PR creation blocked", detail, objectType: "CodeChange", objectId: change.id } }),
+    ]);
+    await createBlockingDecision(projectId, `GitHub PR blocked: ${project.name}`, detail);
+  } else {
+    const prUrl = `https://github.com/${project.repo}/pulls`;
+    await prisma.$transaction([
+      prisma.requirement.update({ where: { id: requirementId }, data: { status: "PR_READY" } }),
+      prisma.codeChange.update({ where: { id: change.id }, data: { status: "PR_READY", prUrl } }),
+      prisma.decision.updateMany({ where: { projectId, title: { contains: "Approve GitHub PR creation" }, status: "PENDING" }, data: { status: "APPROVED", blocking: false } }),
+      prisma.artifact.create({ data: { projectId, name: `${project.name} GitHub PR package`, type: "Code Note", owner: "System", status: "DRAFT" } }),
+      prisma.ledgerEvent.create({ data: { projectId, title: "GitHub PR package approved", detail: `PR creation approved for ${change.branch}.`, objectType: "CodeChange", objectId: change.id } }),
+    ]);
+  }
+
+  revalidateWorkspace(projectId, "requirements");
+  revalidateWorkspace(projectId, "activity");
+  revalidateWorkspace(projectId, "artifacts");
+  revalidateWorkspace(projectId, "decisions");
+}
+
+export async function syncVercelDeployment(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const requirementId = text(formData, "requirementId");
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const change = await prisma.codeChange.findFirst({ where: { projectId, requirementId }, orderBy: { updatedAt: "desc" } });
+
+  if (!project || !change) {
+    throw new Error("Project and code change are required.");
+  }
+
+  if (!project.vercelProject || !project.vercelTeam) {
+    const detail = "Project Vercel team/project is not configured.";
+    await createBlockingDecision(projectId, `Vercel deployment blocked: ${project.name}`, detail);
+    await prisma.ledgerEvent.create({ data: { projectId, title: "Vercel deployment blocked", detail, objectType: "CodeChange", objectId: change.id } });
+  } else {
+    const url = project.previewUrl || `https://${project.vercelProject}.vercel.app`;
+    await prisma.$transaction([
+      prisma.requirement.update({ where: { id: requirementId }, data: { status: "DEPLOYED" } }),
+      prisma.deployment.create({
+        data: {
+          projectId,
+          environment: "PREVIEW",
+          status: "READY",
+          url,
+          branch: change.branch,
+          sourceRunId: change.runId,
+          buildStatus: "Synced",
+          logsUrl: `https://vercel.com/${project.vercelTeam}/${project.vercelProject}`,
+        },
+      }),
+      prisma.ledgerEvent.create({ data: { projectId, title: "Vercel preview synced", detail: `Preview deployment recorded for ${change.branch}: ${url}`, objectType: "CodeChange", objectId: change.id } }),
+    ]);
+  }
+
+  revalidateWorkspace(projectId, "requirements");
+  revalidateWorkspace(projectId, "deployments");
+  revalidateWorkspace(projectId, "activity");
+}
+
+export async function markRequirementAccepted(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const requirementId = text(formData, "requirementId");
+
+  await prisma.$transaction([
+    prisma.requirement.update({ where: { id: requirementId }, data: { status: "ACCEPTED" } }),
+    prisma.review.create({ data: { projectId, type: "Boss Acceptance", owner: "Boss", result: "PASS", summary: `${requirementId} accepted after preview verification.` } }),
+    prisma.ledgerEvent.create({ data: { projectId, title: "Requirement accepted", detail: `${requirementId} marked accepted by Boss.`, objectType: "Requirement", objectId: requirementId } }),
+  ]);
+
+  revalidateWorkspace(projectId, "requirements");
+  revalidateWorkspace(projectId, "reviews");
+  revalidateWorkspace(projectId, "memory");
 }
 
 export async function createProject(formData: FormData) {

@@ -55,6 +55,10 @@ export default async function SettingsPage() {
               <input name="vercelToken" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Vercel token" />
               <input name="vercelTeam" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Vercel team slug or id" />
               <input name="vercelProject" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500 md:col-span-2" placeholder="Vercel project id/name" />
+              <input name="gptApiKey" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Global GPT API key" />
+              <input name="geminiApiKey" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Global Gemini API key" />
+              <input name="claudeApiKey" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Global Claude API key" />
+              <input name="minimaxApiKey" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Global Minimax API key" />
               <button className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 md:col-span-2" type="submit">
                 Save Config
               </button>

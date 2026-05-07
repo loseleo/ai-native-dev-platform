@@ -20,7 +20,8 @@ export default async function MemoryPage({ params }: { params: Promise<{ project
             <p><strong className="text-slate-950">Goal:</strong> {data.project.goal}</p>
             <p><strong className="text-slate-950">Current Stage:</strong> {data.project.stage}</p>
             <p><strong className="text-slate-950">Progress:</strong> {data.project.progress}% with {data.tasks.filter((task) => task.status === "Blocked").length} blocked tasks.</p>
-            <p><strong className="text-slate-950">What new Agent should do first:</strong> Read PRD, open Tasks, then check Decisions.</p>
+            <p><strong className="text-slate-950">AI Runs:</strong> {data.agentRuns.length} runs, {data.requirements.length} requirements, {data.codeChanges.length} code change packages.</p>
+            <p><strong className="text-slate-950">What new Agent should do first:</strong> Read Requirements, Activity, Tasks, then Decisions.</p>
           </div>
         </Card>
         <TableShell title="Project Ledger">
@@ -29,6 +30,7 @@ export default async function MemoryPage({ params }: { params: Promise<{ project
             getKey={(event) => event.id}
             columns={[
               { header: "Time", cell: (event) => <StatusBadge value={event.time} /> },
+              { header: "Object", cell: (event) => event.objectType ? <StatusBadge value={`${event.objectType}:${event.objectId ?? ""}`} /> : "Project" },
               { header: "Event", cell: (event) => <span className="font-semibold text-slate-950">{event.title}</span> },
               { header: "Detail", cell: (event) => <span className="line-clamp-2 max-w-2xl">{event.detail}</span> },
             ]}

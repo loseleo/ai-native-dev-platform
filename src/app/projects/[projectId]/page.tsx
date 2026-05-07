@@ -1,24 +1,28 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { CreateDialog } from "@/components/create-dialog";
 import { Badge, Card, DataTable, SectionHeader, StatusBadge, TableShell } from "@/components/ui";
 import { workflowStages } from "@/lib/data";
 import { getNextActionModule, getWorkflowModule } from "@/lib/navigation";
+import { getSetupStatus } from "@/lib/setup";
+import { createRequirementFromPrompt } from "@/lib/workspace-actions";
 import { getWorkspaceData } from "@/lib/workspace-repository";
 
 export default async function ProjectOverviewPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  const data = await getWorkspaceData(projectId);
+  const [data, setup] = await Promise.all([getWorkspaceData(projectId), getSetupStatus()]);
 
   if (!data.project) {
     notFound();
   }
 
+  const canWrite = setup.databaseReady;
   const currentIndex = workflowStages.indexOf(data.project.stage);
   const stats = [
+    { label: "Requirements", value: data.requirements.length, detail: "AI delivery intake", href: "requirements", tone: "info" as const },
     { label: "Tasks", value: data.tasks.length, detail: "Project-scoped delivery work", href: "tasks", tone: "info" as const },
     { label: "Open Bugs", value: data.bugs.filter((bug) => bug.status !== "Closed").length, detail: "Tracked by QA and RD", href: "bugs", tone: "warn" as const },
     { label: "Decisions", value: data.decisions.length, detail: "Escalations for this project", href: "decisions", tone: "bad" as const },
-    { label: "Agents", value: data.agents.length, detail: "Assigned digital workers", href: "agents", tone: "good" as const },
   ];
 
   return (
@@ -26,6 +30,28 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
       <SectionHeader
         title="Overview"
         description="项目快照、阶段、健康度和下一步动作集中在这里，作为 Workspace 的入口页。"
+        action={
+          <CreateDialog title="Start AI Delivery" description="输入 Web 需求，生成 Requirement 并进入 AI 半自动交付流。" trigger="Start AI Delivery" disabled={!canWrite}>
+            <form action={createRequirementFromPrompt} className="space-y-4">
+              <input name="projectId" type="hidden" value={projectId} />
+              <div className="grid gap-3 md:grid-cols-2">
+                <input name="title" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Todolist web app" />
+                <input name="targetUsers" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Solo operators, small teams" />
+              </div>
+              <textarea name="prompt" className="min-h-28 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="做一个 todolist 网站，支持新增、完成、删除、筛选。" />
+              <div className="grid gap-3 md:grid-cols-3">
+                <textarea name="scope" className="min-h-20 rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="MVP scope" />
+                <textarea name="acceptance" className="min-h-20 rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="Acceptance criteria" />
+                <textarea name="techPreference" className="min-h-20 rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="Next.js + Tailwind + TypeScript" />
+              </div>
+              <div className="flex justify-end">
+                <button disabled={!canWrite} className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400" type="submit">
+                  Create Requirement
+                </button>
+              </div>
+            </form>
+          </CreateDialog>
+        }
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (

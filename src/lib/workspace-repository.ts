@@ -1,15 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import {
   agents as seedAgents,
+  agentRuns as seedAgentRuns,
+  agentRunSteps as seedAgentRunSteps,
   bugs as seedBugs,
+  codeChanges as seedCodeChanges,
   decisions as seedDecisions,
   getProjectData as getSeedProjectData,
   projects as seedProjects,
   tasks as seedTasks,
   type Agent,
+  type AgentRun,
+  type AgentRunStep,
   type AgentStatus,
   type Artifact,
   type Bug,
+  type CodeChange,
   type Decision,
   type DecisionStatus,
   type Deployment,
@@ -228,6 +234,150 @@ function mapAgent(agent: {
   };
 }
 
+function mapRequirement(requirement: {
+  id: string;
+  projectId: string;
+  title: string;
+  prompt: string;
+  targetUsers: string;
+  scope: string;
+  acceptance: string;
+  techPreference: string;
+  status: string;
+}): import("@/lib/data").Requirement {
+  const statuses: Record<string, import("@/lib/data").Requirement["status"]> = {
+    DRAFT: "Draft",
+    PLANNED: "Planned",
+    APPROVED: "Approved",
+    CODE_READY: "Code Ready",
+    PR_READY: "PR Ready",
+    DEPLOYED: "Deployed",
+    ACCEPTED: "Accepted",
+    BLOCKED: "Blocked",
+  };
+
+  return {
+    id: requirement.id,
+    projectId: requirement.projectId,
+    title: requirement.title,
+    prompt: requirement.prompt,
+    targetUsers: requirement.targetUsers,
+    scope: requirement.scope,
+    acceptance: requirement.acceptance,
+    techPreference: requirement.techPreference,
+    status: statuses[requirement.status] ?? "Draft",
+  };
+}
+
+function mapAgentRun(run: {
+  id: string;
+  projectId: string;
+  requirementId: string | null;
+  type: string;
+  status: string;
+  provider: string;
+  model: string;
+  input: string;
+  output: string | null;
+  error: string | null;
+  createdAt: Date;
+  agent?: { name: string } | null;
+}): AgentRun {
+  const statuses: Record<string, AgentRun["status"]> = {
+    QUEUED: "Queued",
+    RUNNING: "Running",
+    WAITING_APPROVAL: "Waiting Approval",
+    COMPLETED: "Completed",
+    FAILED: "Failed",
+    BLOCKED: "Blocked",
+  };
+  const types: Record<string, AgentRun["type"]> = {
+    PLAN: "Plan",
+    CODE: "Code",
+    PR: "PR",
+    DEPLOY: "Deploy",
+    QA: "QA",
+  };
+
+  return {
+    id: run.id,
+    projectId: run.projectId,
+    requirementId: run.requirementId ?? "",
+    agentName: run.agent?.name ?? "System",
+    type: types[run.type] ?? "Plan",
+    status: statuses[run.status] ?? "Queued",
+    provider: run.provider,
+    model: run.model,
+    input: run.input,
+    output: run.output ?? "",
+    error: run.error ?? "",
+    createdAt: run.createdAt.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }),
+  };
+}
+
+function mapAgentRunStep(step: {
+  id: string;
+  runId: string;
+  name: string;
+  status: string;
+  detail: string;
+  output: string | null;
+  error: string | null;
+  createdAt: Date;
+}): AgentRunStep {
+  const statuses: Record<string, AgentRunStep["status"]> = {
+    QUEUED: "Queued",
+    RUNNING: "Running",
+    COMPLETED: "Completed",
+    FAILED: "Failed",
+    BLOCKED: "Blocked",
+  };
+
+  return {
+    id: step.id,
+    runId: step.runId,
+    name: step.name,
+    status: statuses[step.status] ?? "Queued",
+    detail: step.detail,
+    output: step.output ?? "",
+    error: step.error ?? "",
+    createdAt: step.createdAt.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }),
+  };
+}
+
+function mapCodeChange(change: {
+  id: string;
+  projectId: string;
+  requirementId: string | null;
+  runId: string | null;
+  branch: string;
+  commitSha: string | null;
+  prUrl: string | null;
+  summary: string;
+  status: string;
+}): CodeChange {
+  const statuses: Record<string, CodeChange["status"]> = {
+    PLANNED: "Planned",
+    APPROVED: "Approved",
+    GENERATED: "Generated",
+    PR_READY: "PR Ready",
+    BLOCKED: "Blocked",
+    MERGED: "Merged",
+  };
+
+  return {
+    id: change.id,
+    projectId: change.projectId,
+    requirementId: change.requirementId ?? "",
+    runId: change.runId ?? "",
+    branch: change.branch,
+    commitSha: change.commitSha ?? "",
+    prUrl: change.prUrl ?? "",
+    summary: change.summary,
+    status: statuses[change.status] ?? "Planned",
+  };
+}
+
 export async function listProjects(): Promise<Project[]> {
   if (!hasDatabaseUrl()) {
     return seedProjects;
@@ -352,6 +502,9 @@ export async function getWorkspaceData(projectId: string) {
         handovers: true,
         deployments: true,
         artifacts: true,
+        requirements: true,
+        agentRuns: { include: { agent: true, steps: true }, orderBy: { createdAt: "desc" } },
+        codeChanges: true,
         projectAgents: { include: { agent: true } },
       },
     });
@@ -392,8 +545,14 @@ export async function getWorkspaceData(projectId: string) {
           time: event.createdAt.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }),
           title: event.title,
           detail: event.detail,
+          objectType: event.objectType ?? undefined,
+          objectId: event.objectId ?? undefined,
         }),
       ),
+      requirements: project.requirements.map(mapRequirement),
+      agentRuns: project.agentRuns.map(mapAgentRun),
+      agentRunSteps: project.agentRuns.flatMap((run) => run.steps.map(mapAgentRunStep)),
+      codeChanges: project.codeChanges.map(mapCodeChange),
       knowledgeDocs: project.knowledgeDocuments.map(
         (doc): KnowledgeDoc => ({
           id: doc.id,
@@ -422,6 +581,10 @@ export async function getWorkspaceData(projectId: string) {
           status: deployment.status === "READY" ? "Ready" : deployment.status === "FAILED" ? "Failed" : deployment.status === "BUILDING" ? "Building" : "Queued",
           url: deployment.url,
           branch: deployment.branch,
+          vercelDeploymentId: deployment.vercelDeploymentId ?? undefined,
+          sourceRunId: deployment.sourceRunId ?? undefined,
+          buildStatus: deployment.buildStatus ?? undefined,
+          logsUrl: deployment.logsUrl ?? undefined,
         }),
       ),
       artifacts: project.artifacts.map(
@@ -439,4 +602,38 @@ export async function getWorkspaceData(projectId: string) {
   } catch {
     return getSeedProjectData(projectId);
   }
+}
+
+export async function createRequirement() {
+  throw new Error("createRequirement is implemented as a server action.");
+}
+
+export async function listProjectRuns(projectId: string): Promise<AgentRun[]> {
+  const workspace = await getWorkspaceData(projectId);
+  return workspace.agentRuns ?? seedAgentRuns.filter((run) => run.projectId === projectId);
+}
+
+export async function getRunDetail(projectId: string, runId: string) {
+  const workspace = await getWorkspaceData(projectId);
+  return {
+    run: workspace.agentRuns?.find((run) => run.id === runId),
+    steps: workspace.agentRunSteps?.filter((step) => step.runId === runId) ?? seedAgentRunSteps.filter((step) => step.runId === runId),
+    codeChanges: workspace.codeChanges?.filter((change) => change.runId === runId) ?? seedCodeChanges.filter((change) => change.runId === runId),
+  };
+}
+
+export async function createAgentRun() {
+  throw new Error("createAgentRun is implemented as a server action.");
+}
+
+export async function appendRunStep() {
+  throw new Error("appendRunStep is implemented as a server action.");
+}
+
+export async function createCodeChange() {
+  throw new Error("createCodeChange is implemented as a server action.");
+}
+
+export async function linkDeploymentToRun() {
+  throw new Error("linkDeploymentToRun is implemented as a server action.");
 }

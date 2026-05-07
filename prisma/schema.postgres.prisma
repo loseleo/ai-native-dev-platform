@@ -16,6 +16,7 @@ enum ConfigScope {
   LOCAL
   ONLINE
   VERCEL
+  AI_PROVIDER
   SECURITY
 }
 
@@ -183,6 +184,9 @@ model Project {
   deployments        Deployment[]
   artifacts          Artifact[]
   projectAgents      ProjectAgent[]
+  requirements       Requirement[]
+  agentRuns          AgentRun[]
+  codeChanges        CodeChange[]
 }
 
 model Task {
@@ -230,6 +234,8 @@ model LedgerEvent {
   projectId String
   title     String
   detail    String
+  objectType String?
+  objectId   String?
   createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -252,6 +258,90 @@ model Agent {
   updatedAt    DateTime    @updatedAt
 
   projectAgents ProjectAgent[]
+  agentRuns     AgentRun[]
+}
+
+model Requirement {
+  id             String   @id @default(cuid())
+  projectId      String
+  title          String
+  prompt         String
+  targetUsers    String
+  scope          String
+  acceptance     String
+  techPreference String
+  status         String   @default("DRAFT")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentRuns   AgentRun[]
+  codeChanges CodeChange[]
+
+  @@index([projectId])
+}
+
+model AgentRun {
+  id            String   @id @default(cuid())
+  projectId     String
+  requirementId String?
+  agentId       String?
+  type          String
+  status        String   @default("QUEUED")
+  provider      String
+  model         String
+  input         String
+  output        String?
+  error         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirement Requirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  agent       Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  steps       AgentRunStep[]
+  codeChanges CodeChange[]
+
+  @@index([projectId])
+  @@index([requirementId])
+  @@index([agentId])
+}
+
+model AgentRunStep {
+  id        String   @id @default(cuid())
+  runId     String
+  name      String
+  status    String   @default("QUEUED")
+  detail    String
+  output    String?
+  error     String?
+  createdAt DateTime @default(now())
+
+  run AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+model CodeChange {
+  id            String   @id @default(cuid())
+  projectId     String
+  requirementId String?
+  runId         String?
+  branch        String
+  commitSha     String?
+  prUrl         String?
+  summary       String
+  status        String   @default("PLANNED")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirement Requirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  run         AgentRun?    @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([requirementId])
+  @@index([runId])
 }
 
 model ProjectAgent {
@@ -335,6 +425,10 @@ model Deployment {
   status      DeploymentStatus      @default(QUEUED)
   url         String
   branch      String
+  vercelDeploymentId String?
+  sourceRunId String?
+  buildStatus String?
+  logsUrl     String?
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
 

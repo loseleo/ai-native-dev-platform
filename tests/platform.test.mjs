@@ -69,3 +69,28 @@ test("project and agent schemas store delivery and model configuration", () => {
   assert.match(actions, /minimax/);
   assert.match(actions, /claude/);
 });
+
+test("ai delivery flow has requirements, runs, code changes, and approval actions", () => {
+  const schema = read("prisma/schema.postgres.prisma");
+  const actions = read("src/lib/workspace-actions.ts");
+  const requirementsPage = read("src/app/projects/[projectId]/requirements/page.tsx");
+  const activityPage = read("src/app/projects/[projectId]/activity/page.tsx");
+  const settings = read("src/app/settings/page.tsx");
+
+  assert.match(schema, /model Requirement/);
+  assert.match(schema, /model AgentRun/);
+  assert.match(schema, /model AgentRunStep/);
+  assert.match(schema, /model CodeChange/);
+  assert.match(schema, /objectType/);
+  assert.match(actions, /createRequirementFromPrompt/);
+  assert.match(actions, /planRequirementWithAI/);
+  assert.match(actions, /approveRunPlan/);
+  assert.match(actions, /generateCodePatch/);
+  assert.match(actions, /approveAndCreatePullRequest/);
+  assert.match(actions, /syncVercelDeployment/);
+  assert.match(actions, /markRequirementAccepted/);
+  assert.match(actions, /AI_PROVIDER/);
+  assert.match(requirementsPage, /Start AI Delivery/);
+  assert.match(activityPage, /Run Steps/);
+  assert.match(settings, /Global GPT API key/);
+});
