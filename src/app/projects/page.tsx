@@ -63,26 +63,35 @@ export default async function ProjectsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-slate-700" htmlFor="repo">Repository</label>
-                    <input id="repo" name="repo" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="loseleo/ai-native-dev-platform" />
+                    <label className="text-sm font-semibold text-slate-700" htmlFor="gitUrl">Git URL</label>
+                    <input id="gitUrl" name="gitUrl" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="https://github.com/loseleo/ai-native-dev-platform" />
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700" htmlFor="gitBranch">Branch</label>
                     <input id="gitBranch" name="gitBranch" defaultValue="main" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" />
                   </div>
                 </div>
+                <div className="mt-3">
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="repo">Repository Override</label>
+                  <input id="repo" name="repo" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Optional owner/repo override" />
+                </div>
               </div>
 
               <div className="border-t border-slate-200 pt-4">
                 <h3 className="text-sm font-semibold text-slate-950">Vercel Deployment</h3>
+                <div className="mt-3">
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="vercelProjectUrl">Vercel Project URL</label>
+                  <input id="vercelProjectUrl" name="vercelProjectUrl" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="https://vercel.com/jingbos-projects/ai-native-dev-platform" />
+                  <p className="mt-1 text-xs text-slate-500">Paste the Vercel dashboard URL and the system will derive team/owner and project on submit.</p>
+                </div>
                 <div className="mt-3 grid gap-4 md:grid-cols-3">
                   <div>
                     <label className="text-sm font-semibold text-slate-700" htmlFor="vercelTeam">Team / Owner</label>
-                    <input id="vercelTeam" name="vercelTeam" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="jingbos-projects" />
+                    <input id="vercelTeam" name="vercelTeam" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Optional override" />
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700" htmlFor="vercelProject">Project</label>
-                    <input id="vercelProject" name="vercelProject" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="ai-native-dev-platform" />
+                    <input id="vercelProject" name="vercelProject" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Optional override" />
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700" htmlFor="previewUrl">Preview URL</label>

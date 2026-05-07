@@ -63,6 +63,8 @@ test("project and agent schemas store delivery and model configuration", () => {
   }
 
   assert.match(actions, /encryptedOptional/);
+  assert.match(actions, /parseGitRepository/);
+  assert.match(actions, /parseVercelProjectUrl/);
   assert.match(actions, /gemini/);
   assert.match(actions, /minimax/);
   assert.match(actions, /claude/);

@@ -53,6 +53,72 @@ function agentModel(formData: FormData, provider: SupportedAgentProvider) {
   return text(formData, "model") || defaultModels[provider];
 }
 
+function parseGitRepository(value: string) {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim().replace(/\.git$/, "");
+  const sshMatch = trimmed.match(/^git@github\.com:([^/]+\/[^/]+)$/i);
+
+  if (sshMatch?.[1]) {
+    return sshMatch[1];
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const parts = url.pathname.split("/").filter(Boolean);
+
+    if (url.hostname.endsWith("github.com") && parts.length >= 2) {
+      return `${parts[0]}/${parts[1]}`;
+    }
+  } catch {
+    // Plain owner/repo values are valid and handled below.
+  }
+
+  return trimmed;
+}
+
+function parseVercelProjectUrl(value: string) {
+  if (!value) {
+    return { team: "", project: "" };
+  }
+
+  try {
+    const url = new URL(value);
+    const parts = url.pathname.split("/").filter(Boolean);
+
+    if (url.hostname === "vercel.com" && parts.length >= 2) {
+      return {
+        team: parts[0] ?? "",
+        project: parts[1] ?? "",
+      };
+    }
+  } catch {
+    // Manual team/project fields remain the source of truth if URL parsing fails.
+  }
+
+  return { team: "", project: "" };
+}
+
+function parsePreviewUrl(value: string) {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (url.hostname.endsWith(".vercel.app")) {
+      return url.toString().replace(/\/$/, "");
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
+
 function revalidateWorkspace(projectId: string, module?: string) {
   revalidatePath("/dashboard");
   revalidatePath("/decision-inbox");
@@ -69,13 +135,16 @@ export async function createProject(formData: FormData) {
   const name = text(formData, "name");
   const goal = text(formData, "goal");
   const targetUsers = text(formData, "targetUsers");
-  const repo = text(formData, "repo");
-  const previewUrl = text(formData, "previewUrl");
+  const gitUrl = text(formData, "gitUrl");
+  const repo = parseGitRepository(text(formData, "repo") || gitUrl);
+  const vercelProjectUrl = text(formData, "vercelProjectUrl");
+  const parsedVercel = parseVercelProjectUrl(vercelProjectUrl);
+  const previewUrl = text(formData, "previewUrl") || parsePreviewUrl(vercelProjectUrl);
   const nextActions = text(formData, "nextActions");
   const gitProvider = text(formData, "gitProvider") || "GitHub";
   const gitBranch = text(formData, "gitBranch") || "main";
-  const vercelTeam = text(formData, "vercelTeam");
-  const vercelProject = text(formData, "vercelProject") || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const vercelTeam = text(formData, "vercelTeam") || parsedVercel.team;
+  const vercelProject = text(formData, "vercelProject") || parsedVercel.project || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const databaseProvider = text(formData, "databaseProvider") || "Supabase Postgres";
   const projectDatabaseUrl = text(formData, "projectDatabaseUrl");
 
