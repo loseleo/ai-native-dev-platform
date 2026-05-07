@@ -15,6 +15,7 @@ enum ConfigScope {
   LOCAL
   ONLINE
   VERCEL
+  GITHUB
   AI_PROVIDER
   SECURITY
 }

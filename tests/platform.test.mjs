@@ -90,7 +90,11 @@ test("ai delivery flow has requirements, runs, code changes, and approval action
   assert.match(actions, /syncVercelDeployment/);
   assert.match(actions, /markRequirementAccepted/);
   assert.match(actions, /AI_PROVIDER/);
+  assert.match(actions, /createGitHubPrPackage/);
+  assert.match(actions, /GITHUB/);
   assert.match(requirementsPage, /Start AI Delivery/);
+  assert.match(requirementsPage, /PM Planning/);
   assert.match(activityPage, /Run Steps/);
   assert.match(settings, /Global GPT API key/);
+  assert.match(settings, /GitHub token/);
 });

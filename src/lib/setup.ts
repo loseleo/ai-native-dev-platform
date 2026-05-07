@@ -208,6 +208,7 @@ export async function updateIntegrationConfigs(formData: FormData) {
     { scope: "VERCEL" as const, key: "TOKEN", value: String(formData.get("vercelToken") ?? "").trim() },
     { scope: "VERCEL" as const, key: "TEAM", value: String(formData.get("vercelTeam") ?? "").trim() },
     { scope: "VERCEL" as const, key: "PROJECT", value: String(formData.get("vercelProject") ?? "").trim() },
+    { scope: "GITHUB" as const, key: "TOKEN", value: String(formData.get("githubToken") ?? "").trim() },
     { scope: "AI_PROVIDER" as const, key: "GPT_API_KEY", value: String(formData.get("gptApiKey") ?? "").trim() },
     { scope: "AI_PROVIDER" as const, key: "GEMINI_API_KEY", value: String(formData.get("geminiApiKey") ?? "").trim() },
     { scope: "AI_PROVIDER" as const, key: "CLAUDE_API_KEY", value: String(formData.get("claudeApiKey") ?? "").trim() },

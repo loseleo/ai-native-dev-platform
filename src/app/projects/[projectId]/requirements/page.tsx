@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { CreateDialog } from "@/components/create-dialog";
-import { ActionButton, DataTable, ReadOnlyBanner, RowActions, SectionHeader, StatusBadge, TableShell } from "@/components/ui";
-import { getSetupStatus } from "@/lib/setup";
+import { ActionButton, Card, DataTable, ReadOnlyBanner, RowActions, SectionHeader, StatusBadge, TableShell } from "@/components/ui";
+import { getSetupStatus, listMaskedConfigs } from "@/lib/setup";
 import {
   approveAndCreatePullRequest,
   approveRunPlan,
@@ -15,13 +15,23 @@ import { getWorkspaceData } from "@/lib/workspace-repository";
 
 export default async function RequirementsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  const [data, setup] = await Promise.all([getWorkspaceData(projectId), getSetupStatus()]);
+  const [data, setup, configs] = await Promise.all([getWorkspaceData(projectId), getSetupStatus(), listMaskedConfigs()]);
 
   if (!data.project) {
     notFound();
   }
 
   const canWrite = setup.databaseReady;
+  const hasGlobalProviderKey = configs.some((config) => config.scope === "AI_PROVIDER" && config.key.endsWith("_API_KEY"));
+  const hasGitHubToken = configs.some((config) => config.scope === "GITHUB" && config.key === "TOKEN");
+  const pmReady = data.agents.some((agent) => agent.team === "PM" && (agent.keyConfigured || hasGlobalProviderKey));
+  const rdReady = data.agents.some((agent) => agent.team === "RD" && (agent.keyConfigured || hasGlobalProviderKey));
+  const readiness = [
+    { label: "PM Planning", value: pmReady ? "Ready" : "Blocked", detail: pmReady ? "PM Agent or global provider key is configured." : "Configure PM Agent key or a global provider key." },
+    { label: "RD Code Plan", value: rdReady ? "Ready" : "Blocked", detail: rdReady ? "RD Agent or global provider key is configured." : "Configure RD Agent key or a global provider key." },
+    { label: "GitHub PR", value: data.project.repo && hasGitHubToken ? "Ready" : "Blocked", detail: data.project.repo ? "Repository configured; GitHub token controls PR package creation." : "Project repository is missing." },
+    { label: "Vercel Preview", value: data.project.vercelProject && data.project.vercelTeam ? "Ready" : "Blocked", detail: data.project.vercelProject ? "Project Vercel owner/project is configured." : "Vercel owner/project is missing." },
+  ];
 
   return (
     <div className="space-y-6">
@@ -30,6 +40,17 @@ export default async function RequirementsPage({ params }: { params: Promise<{ p
         description="从一句 Web 需求启动半自动 AI 交付：生成计划、Boss 审批、代码计划、PR 边界、部署记录和验收。"
       />
       {!canWrite ? <ReadOnlyBanner /> : null}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {readiness.map((item) => (
+          <Card key={item.label} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-700">{item.label}</p>
+              <StatusBadge value={item.value} />
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">{item.detail}</p>
+          </Card>
+        ))}
+      </div>
       <div className="flex justify-end">
         <CreateDialog title="Start AI Delivery" description="输入 Web 需求后，平台会创建 Requirement 和初始 AgentRun。" trigger="Start AI Delivery" disabled={!canWrite}>
           <form action={createRequirementFromPrompt} className="space-y-4">

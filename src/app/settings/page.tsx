@@ -55,6 +55,7 @@ export default async function SettingsPage() {
               <input name="vercelToken" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Vercel token" />
               <input name="vercelTeam" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Vercel team slug or id" />
               <input name="vercelProject" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500 md:col-span-2" placeholder="Vercel project id/name" />
+              <input name="githubToken" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500 md:col-span-2" placeholder="GitHub token for protected PR package creation" />
               <input name="gptApiKey" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Global GPT API key" />
               <input name="geminiApiKey" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Global Gemini API key" />
               <input name="claudeApiKey" type="password" className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Global Claude API key" />
