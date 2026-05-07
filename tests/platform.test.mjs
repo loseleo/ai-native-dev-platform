@@ -92,9 +92,27 @@ test("ai delivery flow has requirements, runs, code changes, and approval action
   assert.match(actions, /AI_PROVIDER/);
   assert.match(actions, /createGitHubPrPackage/);
   assert.match(actions, /GITHUB/);
+  assert.match(actions, /readLatestVercelDeployment/);
+  assert.match(actions, new RegExp("v13/deployments"));
   assert.match(requirementsPage, /Start AI Delivery/);
   assert.match(requirementsPage, /PM Planning/);
   assert.match(activityPage, /Run Steps/);
   assert.match(settings, /Global GPT API key/);
   assert.match(settings, /GitHub token/);
+});
+
+test("ai delivery smoke prompts cover todolist and pomodoro website delivery", () => {
+  const source = read("src/lib/ai-delivery.ts");
+
+  assert.match(source, /deliveryStateFlow/);
+  assert.match(source, /Draft/);
+  assert.match(source, /Planned/);
+  assert.match(source, /Code Ready/);
+  assert.match(source, /PR Ready/);
+  assert.match(source, /Deployed/);
+  assert.match(source, /Accepted/);
+  assert.match(source, /Todolist Web App/);
+  assert.match(source, /Pomodoro Timer Web App/);
+  assert.match(source, /start, pause, reset/);
+  assert.match(source, /completed session count/);
 });

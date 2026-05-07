@@ -168,6 +168,68 @@ async function getGitHubToken() {
   return config.encrypted ? decryptSecret(config.value) : config.value;
 }
 
+async function getVercelConfig(project: { vercelTeam: string | null; vercelProject: string | null }) {
+  const configs = await prisma.systemConfig.findMany({ where: { scope: "VERCEL" } });
+  const byKey = new Map(configs.map((config) => [config.key, config.encrypted ? decryptSecret(config.value) : config.value]));
+
+  return {
+    token: byKey.get("TOKEN") ?? "",
+    team: project.vercelTeam || byKey.get("TEAM") || "",
+    project: project.vercelProject || byKey.get("PROJECT") || "",
+  };
+}
+
+async function readLatestVercelDeployment(project: { vercelTeam: string | null; vercelProject: string | null }, fallbackUrl: string) {
+  const config = await getVercelConfig(project);
+
+  if (!config.token || !config.project) {
+    return {
+      status: "READY" as const,
+      url: fallbackUrl,
+      buildStatus: "Manual sync",
+      logsUrl: config.team && config.project ? `https://vercel.com/${config.team}/${config.project}` : "",
+      vercelDeploymentId: "",
+    };
+  }
+
+  const params = new URLSearchParams({ projectId: config.project, limit: "1" });
+
+  if (config.team) {
+    params.set("teamId", config.team);
+  }
+
+  const response = await fetch(`https://api.vercel.com/v13/deployments?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return {
+      status: "READY" as const,
+      url: fallbackUrl,
+      buildStatus: `Manual sync; Vercel API ${response.status}`,
+      logsUrl: config.team && config.project ? `https://vercel.com/${config.team}/${config.project}` : "",
+      vercelDeploymentId: "",
+    };
+  }
+
+  const body = await response.json() as {
+    deployments?: Array<{ uid?: string; url?: string; state?: string; inspectorUrl?: string }>;
+  };
+  const deployment = body.deployments?.[0];
+  const state = deployment?.state ?? "READY";
+
+  return {
+    status: state === "ERROR" || state === "FAILED" ? ("FAILED" as const) : state === "BUILDING" || state === "QUEUED" ? ("BUILDING" as const) : ("READY" as const),
+    url: deployment?.url ? `https://${deployment.url}` : fallbackUrl,
+    buildStatus: state,
+    logsUrl: deployment?.inspectorUrl || (config.team && config.project ? `https://vercel.com/${config.team}/${config.project}` : ""),
+    vercelDeploymentId: deployment?.uid ?? "",
+  };
+}
+
 async function createGitHubPrPackage({
   baseBranch,
   branch,
@@ -723,23 +785,25 @@ export async function syncVercelDeployment(formData: FormData) {
     ]);
   } else {
     const url = project.previewUrl || `https://${project.vercelProject}.vercel.app`;
+    const deployment = await readLatestVercelDeployment(project, url);
     await prisma.$transaction([
       prisma.requirement.update({ where: { id: requirementId }, data: { status: "DEPLOYED" } }),
-      prisma.agentRun.update({ where: { id: run.id }, data: { status: "COMPLETED", output: url } }),
-      prisma.agentRunStep.create({ data: { runId: run.id, name: "Vercel preview synced", status: "COMPLETED", detail: `Preview deployment recorded for ${change.branch}.`, output: url } }),
+      prisma.agentRun.update({ where: { id: run.id }, data: { status: "COMPLETED", output: deployment.url } }),
+      prisma.agentRunStep.create({ data: { runId: run.id, name: "Vercel preview synced", status: "COMPLETED", detail: `Preview deployment recorded for ${change.branch}.`, output: deployment.url } }),
       prisma.deployment.create({
         data: {
           projectId,
           environment: "PREVIEW",
-          status: "READY",
-          url,
+          status: deployment.status,
+          url: deployment.url,
           branch: change.branch,
-          sourceRunId: change.runId,
-          buildStatus: "Synced",
-          logsUrl: `https://vercel.com/${project.vercelTeam}/${project.vercelProject}`,
+          sourceRunId: run.id,
+          vercelDeploymentId: deployment.vercelDeploymentId,
+          buildStatus: deployment.buildStatus,
+          logsUrl: deployment.logsUrl,
         },
       }),
-      prisma.ledgerEvent.create({ data: { projectId, title: "Vercel preview synced", detail: `Preview deployment recorded for ${change.branch}: ${url}`, objectType: "AgentRun", objectId: run.id } }),
+      prisma.ledgerEvent.create({ data: { projectId, title: "Vercel preview synced", detail: `Preview deployment recorded for ${change.branch}: ${deployment.url}`, objectType: "AgentRun", objectId: run.id } }),
     ]);
   }
 

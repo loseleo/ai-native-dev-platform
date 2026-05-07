@@ -18,10 +18,46 @@ export type DeliveryPlan = {
   deploymentSummary: string;
 };
 
+export const deliveryStateFlow = ["Draft", "Planned", "Approved", "Code Ready", "PR Ready", "Deployed", "Accepted"] as const;
+
+export const smokeRequirementPrompts = [
+  "Todolist Web App: add, complete, delete, and filter todos.",
+  "Pomodoro Timer Web App: focus timer, break timer, start, pause, reset, and session tracking.",
+] as const;
+
 function todoAwarePlan(prompt: string): DeliveryPlan {
   const normalized = prompt.toLowerCase();
   const isTodo = normalized.includes("todo") || normalized.includes("待办");
-  const featureLabel = isTodo ? "todolist" : "web app";
+  const isPomodoro = normalized.includes("pomodoro") || normalized.includes("番茄");
+  const featureLabel = isTodo ? "todolist" : isPomodoro ? "pomodoro timer" : "web app";
+  const rdAcceptance = isTodo
+    ? "Users can add, complete, delete, and filter todos."
+    : isPomodoro
+      ? "Users can start, pause, reset, switch focus/break sessions, and see session progress."
+      : "Primary user workflow works end to end.";
+  const qaChecklist = isTodo
+    ? [
+        "Can create a new todo.",
+        "Can toggle completed state.",
+        "Can delete a todo.",
+        "Can filter all, active, and completed items.",
+        "Layout works on mobile and desktop.",
+      ]
+    : isPomodoro
+      ? [
+          "Can start the focus timer.",
+          "Can pause and reset the timer.",
+          "Can switch between focus and break durations.",
+          "Can see completed session count.",
+          "Layout works on mobile and desktop.",
+        ]
+      : [
+          "Can complete the primary workflow.",
+          "Empty state is clear.",
+          "Core action has visible feedback.",
+          "Error or blocked state is understandable.",
+          "Layout works on mobile and desktop.",
+        ];
 
   return {
     prd: [
@@ -44,7 +80,7 @@ function todoAwarePlan(prompt: string): DeliveryPlan {
         team: "RD",
         priority: "P0",
         deliverable: "Next.js implementation plan and code patch",
-        acceptance: isTodo ? "Users can add, complete, delete, and filter todos." : "Primary user workflow works end to end.",
+        acceptance: rdAcceptance,
       },
       {
         title: `Verify ${featureLabel} release checklist`,
@@ -65,13 +101,7 @@ function todoAwarePlan(prompt: string): DeliveryPlan {
       "Implement typed state transitions and accessible form controls.",
       "Add empty/loading/error states and keep mobile layout dense but readable.",
     ].join("\n"),
-    qaChecklist: [
-      "Can create a new todo.",
-      "Can toggle completed state.",
-      "Can delete a todo.",
-      "Can filter all, active, and completed items.",
-      "Layout works on mobile and desktop.",
-    ].join("\n"),
+    qaChecklist: qaChecklist.join("\n"),
     deploymentSummary: "Create a preview deployment from the AI delivery branch after Boss approves the code change.",
   };
 }
