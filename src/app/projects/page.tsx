@@ -27,7 +27,7 @@ export default async function ProjectsPage() {
         <div className="flex justify-end">
           <CreateDialog
             title="Create Web Project from Template"
-            description="创建后自动生成初始 workflow、默认团队、知识库文档和 ledger。"
+            description="创建时只绑定 Git 仓库和数据库上下文；Vercel 在 Deployment 阶段配置。"
             trigger="Create Project"
             disabled={!canWrite}
           >
@@ -64,7 +64,7 @@ export default async function ProjectsPage() {
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700" htmlFor="gitUrl">Git URL</label>
-                    <input id="gitUrl" name="gitUrl" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="https://github.com/loseleo/ai-native-dev-platform" />
+                    <input id="gitUrl" name="gitUrl" required className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="https://github.com/loseleo/ai-native-dev-platform" />
                   </div>
                   <div>
                     <label className="text-sm font-semibold text-slate-700" htmlFor="gitBranch">Branch</label>
@@ -78,29 +78,6 @@ export default async function ProjectsPage() {
               </div>
 
               <div className="border-t border-slate-200 pt-4">
-                <h3 className="text-sm font-semibold text-slate-950">Vercel Deployment</h3>
-                <div className="mt-3">
-                  <label className="text-sm font-semibold text-slate-700" htmlFor="vercelProjectUrl">Vercel Project URL</label>
-                  <input id="vercelProjectUrl" name="vercelProjectUrl" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="https://vercel.com/jingbos-projects/ai-native-dev-platform" />
-                  <p className="mt-1 text-xs text-slate-500">Paste the Vercel dashboard URL and the system will derive team/owner and project on submit.</p>
-                </div>
-                <div className="mt-3 grid gap-4 md:grid-cols-3">
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700" htmlFor="vercelTeam">Team / Owner</label>
-                    <input id="vercelTeam" name="vercelTeam" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Optional override" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700" htmlFor="vercelProject">Project</label>
-                    <input id="vercelProject" name="vercelProject" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Optional override" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700" htmlFor="previewUrl">Preview URL</label>
-                    <input id="previewUrl" name="previewUrl" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="https://..." />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-200 pt-4">
                 <h3 className="text-sm font-semibold text-slate-950">Project Database</h3>
                 <div className="mt-3 grid gap-4 md:grid-cols-[220px_1fr]">
                   <div>
@@ -110,6 +87,8 @@ export default async function ProjectsPage() {
                       <option>Vercel Postgres</option>
                       <option>External Postgres</option>
                       <option>MySQL</option>
+                      <option>SQLite</option>
+                      <option>None / Frontend Only</option>
                     </select>
                   </div>
                   <div>
@@ -117,6 +96,7 @@ export default async function ProjectsPage() {
                     <input id="projectDatabaseUrl" name="projectDatabaseUrl" type="password" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Stored encrypted. Leave blank if not ready." />
                   </div>
                 </div>
+                <p className="mt-2 text-xs text-slate-500">Vercel project binding happens later in the Deployments workspace, after the GitHub repository has code.</p>
               </div>
 
               <div className="border-t border-slate-200 pt-4">

@@ -113,9 +113,10 @@ export async function listMaskedConfigs() {
   }
 
   try {
+    const visibleScopes = ["LOCAL", "ONLINE", "VERCEL", "GITHUB", "SECURITY"];
     const configs = await prisma.systemConfig.findMany({ orderBy: [{ scope: "asc" }, { key: "asc" }] });
 
-    return configs.map((config) => {
+    return configs.filter((config) => visibleScopes.includes(config.scope)).map((config) => {
       const value = config.encrypted ? decryptSecret(config.value) : config.value;
 
       return {
@@ -209,10 +210,6 @@ export async function updateIntegrationConfigs(formData: FormData) {
     { scope: "VERCEL" as const, key: "TEAM", value: String(formData.get("vercelTeam") ?? "").trim() },
     { scope: "VERCEL" as const, key: "PROJECT", value: String(formData.get("vercelProject") ?? "").trim() },
     { scope: "GITHUB" as const, key: "TOKEN", value: String(formData.get("githubToken") ?? "").trim() },
-    { scope: "AI_PROVIDER" as const, key: "GPT_API_KEY", value: String(formData.get("gptApiKey") ?? "").trim() },
-    { scope: "AI_PROVIDER" as const, key: "GEMINI_API_KEY", value: String(formData.get("geminiApiKey") ?? "").trim() },
-    { scope: "AI_PROVIDER" as const, key: "CLAUDE_API_KEY", value: String(formData.get("claudeApiKey") ?? "").trim() },
-    { scope: "AI_PROVIDER" as const, key: "MINIMAX_API_KEY", value: String(formData.get("minimaxApiKey") ?? "").trim() },
   ].filter((config) => config.value);
 
   if (!configs.length) {

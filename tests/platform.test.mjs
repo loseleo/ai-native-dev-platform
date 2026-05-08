@@ -53,6 +53,8 @@ test("project and agent schemas store delivery and model configuration", () => {
   const postgresSchema = read("prisma/schema.postgres.prisma");
   const mysqlSchema = read("prisma/schema.prisma");
   const actions = read("src/lib/workspace-actions.ts");
+  const projectsPage = read("src/app/projects/page.tsx");
+  const deploymentsPage = read("src/app/projects/[projectId]/deployments/page.tsx");
 
   for (const schema of [postgresSchema, mysqlSchema]) {
     assert.match(schema, /gitProvider/);
@@ -65,9 +67,24 @@ test("project and agent schemas store delivery and model configuration", () => {
   assert.match(actions, /encryptedOptional/);
   assert.match(actions, /parseGitRepository/);
   assert.match(actions, /parseVercelProjectUrl/);
+  assert.match(actions, /updateProjectDeploymentConfig/);
+  assert.doesNotMatch(projectsPage, /Vercel Project URL/);
+  assert.match(projectsPage, /Vercel project binding happens later/);
+  assert.match(deploymentsPage, /Configure Vercel Project/);
   assert.match(actions, /gemini/);
   assert.match(actions, /minimax/);
   assert.match(actions, /claude/);
+});
+
+test("project agents can be configured from the workspace", () => {
+  const agentsPage = read("src/app/projects/[projectId]/agents/page.tsx");
+  const actions = read("src/lib/workspace-actions.ts");
+
+  assert.match(agentsPage, /Configure/);
+  assert.match(agentsPage, /updateGlobalAgent/);
+  assert.match(agentsPage, /Leave blank to keep current key/);
+  assert.match(actions, /Agent configured/);
+  assert.match(actions, /revalidateWorkspace\(projectId, "agents"\)/);
 });
 
 test("ai delivery flow has requirements, runs, code changes, and approval actions", () => {
@@ -89,7 +106,7 @@ test("ai delivery flow has requirements, runs, code changes, and approval action
   assert.match(actions, /approveAndCreatePullRequest/);
   assert.match(actions, /syncVercelDeployment/);
   assert.match(actions, /markRequirementAccepted/);
-  assert.match(actions, /AI_PROVIDER/);
+  assert.doesNotMatch(actions, /AI_PROVIDER/);
   assert.match(actions, /createGitHubPrPackage/);
   assert.match(actions, /GITHUB/);
   assert.match(actions, /readLatestVercelDeployment/);
@@ -97,7 +114,7 @@ test("ai delivery flow has requirements, runs, code changes, and approval action
   assert.match(requirementsPage, /Start AI Delivery/);
   assert.match(requirementsPage, /PM Planning/);
   assert.match(activityPage, /Run Steps/);
-  assert.match(settings, /Global GPT API key/);
+  assert.doesNotMatch(settings, /Global GPT API key/);
   assert.match(settings, /GitHub token/);
 });
 

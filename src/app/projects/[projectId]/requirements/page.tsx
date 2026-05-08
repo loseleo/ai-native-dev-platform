@@ -22,13 +22,12 @@ export default async function RequirementsPage({ params }: { params: Promise<{ p
   }
 
   const canWrite = setup.databaseReady;
-  const hasGlobalProviderKey = configs.some((config) => config.scope === "AI_PROVIDER" && config.key.endsWith("_API_KEY"));
   const hasGitHubToken = configs.some((config) => config.scope === "GITHUB" && config.key === "TOKEN");
-  const pmReady = data.agents.some((agent) => agent.team === "PM" && (agent.keyConfigured || hasGlobalProviderKey));
-  const rdReady = data.agents.some((agent) => agent.team === "RD" && (agent.keyConfigured || hasGlobalProviderKey));
+  const pmReady = data.agents.some((agent) => agent.team === "PM" && agent.keyConfigured);
+  const rdReady = data.agents.some((agent) => agent.team === "RD" && agent.keyConfigured);
   const readiness = [
-    { label: "PM Planning", value: pmReady ? "Ready" : "Blocked", detail: pmReady ? "PM Agent or global provider key is configured." : "Configure PM Agent key or a global provider key." },
-    { label: "RD Code Plan", value: rdReady ? "Ready" : "Blocked", detail: rdReady ? "RD Agent or global provider key is configured." : "Configure RD Agent key or a global provider key." },
+    { label: "PM Planning", value: pmReady ? "Ready" : "Blocked", detail: pmReady ? "PM Agent API key is configured." : "Configure the PM Agent API key in AI Organization or Project Agents." },
+    { label: "RD Code Plan", value: rdReady ? "Ready" : "Blocked", detail: rdReady ? "RD Agent API key is configured." : "Configure the RD Agent API key in AI Organization or Project Agents." },
     { label: "GitHub PR", value: data.project.repo && hasGitHubToken ? "Ready" : "Blocked", detail: data.project.repo ? "Repository configured; GitHub token controls PR package creation." : "Project repository is missing." },
     { label: "Vercel Preview", value: data.project.vercelProject && data.project.vercelTeam ? "Ready" : "Blocked", detail: data.project.vercelProject ? "Project Vercel owner/project is configured." : "Vercel owner/project is missing." },
   ];

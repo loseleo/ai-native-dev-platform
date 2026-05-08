@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CreateDialog } from "@/components/create-dialog";
-import { DataTable, ReadOnlyBanner, SectionHeader, StatusBadge, TableShell } from "@/components/ui";
+import { DataTable, ReadOnlyBanner, RowActions, SectionHeader, StatusBadge, TableShell } from "@/components/ui";
 import { getSetupStatus } from "@/lib/setup";
-import { assignAgentToProject, createAgent } from "@/lib/workspace-actions";
+import { assignAgentToProject, createAgent, updateGlobalAgent } from "@/lib/workspace-actions";
 import { getWorkspaceData, listAgents } from "@/lib/workspace-repository";
 
 export default async function ProjectAgentsPage({ params }: { params: Promise<{ projectId: string }> }) {
@@ -81,6 +81,81 @@ export default async function ProjectAgentsPage({ params }: { params: Promise<{ 
             { header: "Status", cell: (agent) => <StatusBadge value={agent.status} /> },
             { header: "Capabilities", cell: (agent) => <span className="line-clamp-1 max-w-xl">{agent.capabilities.join(", ")}</span> },
             { header: "Source", cell: (agent) => agent.projectIds.includes(projectId) ? "Assigned to project" : "Global pool" },
+            {
+              header: "Actions",
+              cell: (agent) => (
+                <RowActions>
+                  <CreateDialog title={`Configure ${agent.name}`} description="更新该 Agent 的模型来源、模型名和加密 API key。" trigger="Configure" disabled={!canWrite}>
+                    <form action={updateGlobalAgent} className="space-y-4">
+                      <input name="agentId" type="hidden" value={agent.id} />
+                      <input name="projectId" type="hidden" value={projectId} />
+                      <div className="grid gap-3 md:grid-cols-[1fr_120px_160px]">
+                        <input
+                          name="name"
+                          className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500"
+                          defaultValue={agent.name}
+                          placeholder="Agent name"
+                        />
+                        <select
+                          name="team"
+                          className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500"
+                          defaultValue={agent.team}
+                        >
+                          <option>PM</option><option>RD</option><option>QA</option><option>UI/UX</option>
+                        </select>
+                        <input
+                          name="role"
+                          className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500"
+                          defaultValue={agent.role}
+                          placeholder="RD Agent"
+                        />
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-[140px_1fr_1fr]">
+                        <select
+                          name="provider"
+                          defaultValue={agent.provider}
+                          className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500"
+                        >
+                          {providers.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                        </select>
+                        <input
+                          name="model"
+                          className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500"
+                          defaultValue={agent.model}
+                          placeholder="Model, blank uses provider default"
+                        />
+                        <input
+                          name="apiKey"
+                          type="password"
+                          className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500"
+                          placeholder={agent.keyConfigured ? "Leave blank to keep current key" : "API key, stored encrypted"}
+                        />
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-[1fr_160px_auto]">
+                        <input
+                          name="capabilities"
+                          className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500"
+                          defaultValue={agent.capabilities.join(", ")}
+                          placeholder="Next.js, QA, PRD..."
+                        />
+                        <select
+                          name="status"
+                          className="h-10 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500"
+                          defaultValue={agent.status}
+                        >
+                          <option value="IDLE">IDLE</option>
+                          <option value="WORKING">WORKING</option>
+                          <option value="BLOCKED">BLOCKED</option>
+                        </select>
+                        <button disabled={!canWrite} className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400" type="submit">
+                          Save Agent
+                        </button>
+                      </div>
+                    </form>
+                  </CreateDialog>
+                </RowActions>
+              ),
+            },
           ]}
         />
       </TableShell>

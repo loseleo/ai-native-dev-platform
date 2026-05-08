@@ -140,16 +140,7 @@ async function pickProjectAgent(projectId: string, team: string) {
 }
 
 async function getProviderApiKey(agent: { apiKey: string | null; provider: string } | null) {
-  if (agent?.apiKey) {
-    return agent.apiKey;
-  }
-
-  const provider = agent?.provider?.toUpperCase() || "GPT";
-  const config = await prisma.systemConfig.findUnique({
-    where: { scope_key: { scope: "AI_PROVIDER", key: `${provider}_API_KEY` } },
-  });
-
-  return config?.value ?? null;
+  return agent?.apiKey ?? null;
 }
 
 async function getGitHubToken() {
@@ -444,7 +435,7 @@ export async function planRequirementWithAI(formData: FormData) {
     const apiKey = await getProviderApiKey(agent);
 
     if (!apiKey) {
-      throw new Error("No PM Agent or global provider API key configured.");
+      throw new Error("No PM Agent API key configured.");
     }
 
     await prisma.agentRunStep.create({
@@ -623,7 +614,7 @@ export async function generateCodePatch(formData: FormData) {
     const apiKey = await getProviderApiKey(agent);
 
     if (!apiKey) {
-      throw new Error("No RD Agent or global provider API key configured.");
+      throw new Error("No RD Agent API key configured.");
     }
 
     const plan = await generateStructured({
@@ -856,19 +847,14 @@ export async function createProject(formData: FormData) {
   const targetUsers = text(formData, "targetUsers");
   const gitUrl = text(formData, "gitUrl");
   const repo = parseGitRepository(text(formData, "repo") || gitUrl);
-  const vercelProjectUrl = text(formData, "vercelProjectUrl");
-  const parsedVercel = parseVercelProjectUrl(vercelProjectUrl);
-  const previewUrl = text(formData, "previewUrl") || parsePreviewUrl(vercelProjectUrl);
   const nextActions = text(formData, "nextActions");
   const gitProvider = text(formData, "gitProvider") || "GitHub";
   const gitBranch = text(formData, "gitBranch") || "main";
-  const vercelTeam = text(formData, "vercelTeam") || parsedVercel.team;
-  const vercelProject = text(formData, "vercelProject") || parsedVercel.project || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const databaseProvider = text(formData, "databaseProvider") || "Supabase Postgres";
   const projectDatabaseUrl = text(formData, "projectDatabaseUrl");
 
-  if (!name || !goal || !targetUsers) {
-    throw new Error("Project name, goal, and target users are required.");
+  if (!name || !goal || !targetUsers || !gitUrl || !databaseProvider) {
+    throw new Error("Project name, goal, target users, Git URL, and database type are required.");
   }
 
   const encryptedDatabaseUrl = encryptedOptional(projectDatabaseUrl);
@@ -879,30 +865,17 @@ export async function createProject(formData: FormData) {
       goal,
       targetUsers,
       repo,
-      previewUrl,
       gitProvider,
       gitBranch,
-      vercelTeam: vercelTeam || null,
-      vercelProject: vercelProject || null,
       databaseProvider,
       databaseUrl: encryptedDatabaseUrl,
       databaseUrlEncrypted: Boolean(encryptedDatabaseUrl),
       nextActions,
       progress: 5,
-      deployments: previewUrl
-        ? {
-            create: {
-              environment: "PREVIEW",
-              status: "READY",
-              url: previewUrl,
-              branch: gitBranch,
-            },
-          }
-        : undefined,
       ledger: {
         create: {
           title: "Project created",
-          detail: `Boss created a Web project with ${gitProvider}, ${vercelProject ? "Vercel project configured" : "Vercel pending"}, and ${encryptedDatabaseUrl ? "database configured" : "database pending"}.`,
+          detail: `Boss created a Web project with ${gitProvider} repository ${repo || gitUrl}, ${databaseProvider} ${encryptedDatabaseUrl ? "configured" : "selected"}, and Vercel pending until deployment.`,
         },
       },
       tasks: {
@@ -983,6 +956,64 @@ export async function createProject(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/projects");
   redirect(`/projects/${project.id}`);
+}
+
+export async function updateProjectDeploymentConfig(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const vercelProjectUrl = text(formData, "vercelProjectUrl");
+  const parsedVercel = parseVercelProjectUrl(vercelProjectUrl);
+  const vercelTeam = text(formData, "vercelTeam") || parsedVercel.team;
+  const vercelProject = text(formData, "vercelProject") || parsedVercel.project;
+  const previewUrl = text(formData, "previewUrl") || parsePreviewUrl(vercelProjectUrl);
+
+  if (!projectId || !vercelTeam || !vercelProject) {
+    throw new Error("Project, Vercel team/owner, and Vercel project are required.");
+  }
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+
+  if (!project) {
+    throw new Error("Project is required.");
+  }
+
+  await prisma.$transaction([
+    prisma.project.update({
+      where: { id: projectId },
+      data: {
+        vercelTeam,
+        vercelProject,
+        previewUrl: previewUrl || null,
+      },
+    }),
+    ...(previewUrl
+      ? [
+          prisma.deployment.create({
+            data: {
+              projectId,
+              environment: "PREVIEW",
+              status: "READY",
+              url: previewUrl,
+              branch: project.gitBranch,
+              buildStatus: "Manual Vercel project binding",
+            },
+          }),
+        ]
+      : []),
+    prisma.ledgerEvent.create({
+      data: {
+        projectId,
+        title: "Vercel project configured",
+        detail: `Boss configured Vercel ${vercelTeam}/${vercelProject}${previewUrl ? ` with preview ${previewUrl}` : ""}.`,
+      },
+    }),
+  ]);
+
+  revalidateWorkspace(projectId, "deployments");
+  revalidateWorkspace(projectId, "memory");
+  revalidateWorkspace(projectId, "requirements");
+  revalidatePath("/projects");
 }
 
 export async function createTask(formData: FormData) {
@@ -1368,6 +1399,7 @@ export async function updateGlobalAgent(formData: FormData) {
   requireDatabase();
 
   const agentId = text(formData, "agentId");
+  const projectId = text(formData, "projectId");
   const name = text(formData, "name");
   const team = text(formData, "team") || "RD";
   const role = text(formData, "role") || `${team} Agent`;
@@ -1388,20 +1420,37 @@ export async function updateGlobalAgent(formData: FormData) {
       }
     : {};
 
-  await prisma.agent.update({
-    where: { id: agentId },
-    data: {
-      name,
-      team,
-      role,
-      capabilities,
-      status: status as never,
-      provider,
-      model,
-      ...apiKeyUpdate,
-    },
-  });
+  await prisma.$transaction([
+    prisma.agent.update({
+      where: { id: agentId },
+      data: {
+        name,
+        team,
+        role,
+        capabilities,
+        status: status as never,
+        provider,
+        model,
+        ...apiKeyUpdate,
+      },
+    }),
+    ...(projectId
+      ? [
+          prisma.ledgerEvent.create({
+            data: {
+              projectId,
+              title: "Agent configured",
+              detail: `${name} updated to ${provider}/${model} with ${rawApiKey ? "a refreshed encrypted key" : "existing key settings"}.`,
+            },
+          }),
+        ]
+      : []),
+  ]);
 
   revalidatePath("/ai-organization");
   revalidatePath("/dashboard");
+  if (projectId) {
+    revalidateWorkspace(projectId, "agents");
+    revalidateWorkspace(projectId, "requirements");
+  }
 }
