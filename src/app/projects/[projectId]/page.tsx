@@ -143,7 +143,7 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
           </dl>
         </Card>
       </div>
-      <TableShell title="Project Agent Summary" description="成员增删和项目绑定在 Agents 模块处理。">
+      <TableShell title="Project Agent Summary" description="项目只借调组织池 Agent；模型、密钥和 prompt 在 AI Organization 配置。">
         <DataTable
           rows={data.agents}
           getKey={(agent) => agent.id}
@@ -152,8 +152,9 @@ export default async function ProjectOverviewPage({ params }: { params: Promise<
             { header: "Team", cell: (agent) => <StatusBadge value={agent.team} /> },
             { header: "Role", cell: (agent) => agent.role },
             { header: "Provider", cell: (agent) => `${agent.provider} / ${agent.model}` },
-            { header: "Status", cell: (agent) => <StatusBadge value={agent.status} /> },
-            { header: "Capabilities", cell: (agent) => <span className="line-clamp-1">{agent.capabilities.join(", ")}</span> },
+            { header: "Runtime", cell: (agent) => <StatusBadge value={agent.status} /> },
+            { header: "Availability", cell: (agent) => <StatusBadge value={agent.availability} /> },
+            { header: "Prompt", cell: (agent) => <span className="line-clamp-1">{agent.systemPrompt || agent.userPrompt || "Prompt pending"}</span> },
           ]}
         />
       </TableShell>

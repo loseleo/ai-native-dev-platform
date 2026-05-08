@@ -252,7 +252,10 @@ model Agent {
   model        String      @default("gpt-5.4")
   apiKey       String?     @db.Text
   apiKeyEncrypted Boolean  @default(true)
-  capabilities String      @db.Text
+  availability String      @default("ONLINE")
+  systemPrompt String      @default("") @db.Text
+  userPrompt   String      @default("") @db.Text
+  capabilities String      @default("") @db.Text
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -346,6 +349,10 @@ model CodeChange {
 model ProjectAgent {
   projectId String
   agentId   String
+  status    String   @default("ACTIVE")
+  summary   String?  @db.Text
+  assignedAt DateTime @default(now())
+  releasedAt DateTime?
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   agent   Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)

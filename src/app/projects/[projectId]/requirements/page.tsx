@@ -23,11 +23,12 @@ export default async function RequirementsPage({ params }: { params: Promise<{ p
 
   const canWrite = setup.databaseReady;
   const hasGitHubToken = configs.some((config) => config.scope === "GITHUB" && config.key === "TOKEN");
-  const pmReady = data.agents.some((agent) => agent.team === "PM" && agent.keyConfigured);
-  const rdReady = data.agents.some((agent) => agent.team === "RD" && agent.keyConfigured);
+  const pmReady = data.agents.some((agent) => agent.team === "PM" && agent.keyConfigured && agent.availability === "Online");
+  const rdReady = data.agents.some((agent) => agent.team === "RD" && agent.keyConfigured && agent.availability === "Online");
+  const canStartDelivery = canWrite && pmReady && rdReady;
   const readiness = [
-    { label: "PM Planning", value: pmReady ? "Ready" : "Blocked", detail: pmReady ? "PM Agent API key is configured." : "Configure the PM Agent API key in AI Organization or Project Agents." },
-    { label: "RD Code Plan", value: rdReady ? "Ready" : "Blocked", detail: rdReady ? "RD Agent API key is configured." : "Configure the RD Agent API key in AI Organization or Project Agents." },
+    { label: "PM Planning", value: pmReady ? "Ready" : "Blocked", detail: pmReady ? "Assigned PM Agent is ready." : "Configure PM in AI Organization, then assign an online idle PM Agent to this project." },
+    { label: "RD Code Plan", value: rdReady ? "Ready" : "Blocked", detail: rdReady ? "Assigned RD Agent is ready." : "Configure RD in AI Organization, then assign an online idle RD Agent to this project." },
     { label: "GitHub PR", value: data.project.repo && hasGitHubToken ? "Ready" : "Blocked", detail: data.project.repo ? "Repository configured; GitHub token controls PR package creation." : "Project repository is missing." },
     { label: "Vercel Preview", value: data.project.vercelProject && data.project.vercelTeam ? "Ready" : "Blocked", detail: data.project.vercelProject ? "Project Vercel owner/project is configured." : "Vercel owner/project is missing." },
   ];
@@ -51,7 +52,7 @@ export default async function RequirementsPage({ params }: { params: Promise<{ p
         ))}
       </div>
       <div className="flex justify-end">
-        <CreateDialog title="Start AI Delivery" description="输入 Web 需求后，平台会创建 Requirement 和初始 AgentRun。" trigger="Start AI Delivery" disabled={!canWrite}>
+        <CreateDialog title="Start AI Delivery" description="先选择项目员工，再由 Boss 填写需求；平台随后创建 Requirement 和初始 AgentRun。" trigger="Start AI Delivery" disabled={!canStartDelivery}>
           <form action={createRequirementFromPrompt} className="space-y-4">
             <input name="projectId" type="hidden" value={projectId} />
             <div className="grid gap-3 md:grid-cols-2">
@@ -65,12 +66,13 @@ export default async function RequirementsPage({ params }: { params: Promise<{ p
               <textarea name="techPreference" className="min-h-20 rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="Next.js + Tailwind + TypeScript" />
             </div>
             <div className="flex justify-end">
-              <button disabled={!canWrite} className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400" type="submit">
+              <button disabled={!canStartDelivery} className="h-10 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400" type="submit">
                 Create Requirement
               </button>
             </div>
           </form>
         </CreateDialog>
+        {!canStartDelivery ? <p className="ml-3 self-center text-xs text-amber-700">Assign ready PM/RD agents first.</p> : null}
       </div>
       <TableShell title="AI Delivery Requirements" description="每个 Requirement 都有明确审批门禁；GitHub/Vercel 写入必须经 Boss 批准。">
         <DataTable

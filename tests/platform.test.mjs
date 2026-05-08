@@ -62,6 +62,10 @@ test("project and agent schemas store delivery and model configuration", () => {
     assert.match(schema, /databaseUrl/);
     assert.match(schema, /provider\s+String\s+@default\("gpt"\)/);
     assert.match(schema, /apiKey/);
+    assert.match(schema, /availability\s+String\s+@default\("ONLINE"\)/);
+    assert.match(schema, /systemPrompt/);
+    assert.match(schema, /userPrompt/);
+    assert.match(schema, /summary\s+String\?/);
   }
 
   assert.match(actions, /encryptedOptional/);
@@ -76,15 +80,18 @@ test("project and agent schemas store delivery and model configuration", () => {
   assert.match(actions, /claude/);
 });
 
-test("project agents can be configured from the workspace", () => {
+test("project agents are assigned, released, and stopped from the workspace", () => {
   const agentsPage = read("src/app/projects/[projectId]/agents/page.tsx");
   const actions = read("src/lib/workspace-actions.ts");
 
-  assert.match(agentsPage, /Configure/);
-  assert.match(agentsPage, /updateGlobalAgent/);
-  assert.match(agentsPage, /Leave blank to keep current key/);
-  assert.match(actions, /Agent configured/);
-  assert.match(actions, /revalidateWorkspace\(projectId, "agents"\)/);
+  assert.match(agentsPage, /Assign Idle Agent/);
+  assert.match(agentsPage, /releaseProjectAgent/);
+  assert.match(agentsPage, /forceStopProjectAgent/);
+  assert.doesNotMatch(agentsPage, /updateGlobalAgent/);
+  assert.doesNotMatch(agentsPage, /apiKey/);
+  assert.match(actions, /Only online and idle agents/);
+  assert.match(actions, /Agent released/);
+  assert.match(actions, /Agent force stopped/);
 });
 
 test("ai delivery flow has requirements, runs, code changes, and approval actions", () => {
@@ -116,6 +123,21 @@ test("ai delivery flow has requirements, runs, code changes, and approval action
   assert.match(activityPage, /Run Steps/);
   assert.doesNotMatch(settings, /Global GPT API key/);
   assert.match(settings, /GitHub token/);
+});
+
+test("organization owns agent prompts while project tasks use boss approval gates", () => {
+  const organization = read("src/app/ai-organization/page.tsx");
+  const tasksPage = read("src/app/projects/[projectId]/tasks/page.tsx");
+  const actions = read("src/lib/workspace-actions.ts");
+
+  assert.match(organization, /System Prompt/);
+  assert.match(organization, /User Prompt/);
+  assert.match(organization, /Availability/);
+  assert.doesNotMatch(organization, /Capabilities/);
+  assert.match(tasksPage, /Boss Gate/);
+  assert.match(tasksPage, /reviewTaskApproval/);
+  assert.doesNotMatch(tasksPage, /Create Task/);
+  assert.match(actions, /Boss Task Gate/);
 });
 
 test("ai delivery smoke prompts cover todolist and pomodoro website delivery", () => {

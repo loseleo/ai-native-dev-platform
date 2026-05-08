@@ -132,7 +132,7 @@ function revalidateWorkspace(projectId: string, module?: string) {
 
 async function pickProjectAgent(projectId: string, team: string) {
   const membership = await prisma.projectAgent.findFirst({
-    where: { projectId, agent: { team } },
+    where: { projectId, status: "ACTIVE", agent: { team, availability: "ONLINE" } },
     include: { agent: true },
   });
 
@@ -348,6 +348,11 @@ export async function createRequirementFromPrompt(formData: FormData) {
   }
 
   const agent = await pickProjectAgent(projectId, "PM");
+  const rdAgent = await pickProjectAgent(projectId, "RD");
+
+  if (!agent || !rdAgent) {
+    throw new Error("Assign online and idle PM/RD agents from AI Organization before starting AI delivery.");
+  }
 
   await prisma.$transaction(async (tx) => {
     const requirement = await tx.requirement.create({
@@ -442,17 +447,20 @@ export async function planRequirementWithAI(formData: FormData) {
       data: { runId: run.id, name: "AI planning", status: "RUNNING", detail: "Generating PRD, tasks, technical plan, code plan, and QA checklist." },
     });
 
+    await prisma.agent.update({ where: { id: agent.id }, data: { status: "WORKING" } });
+
     const plan = await generateStructured({
       provider: agent.provider,
       model: agent.model,
       apiKey,
-      system: "You are an AI PM/RD/QA delivery team for a Web project.",
-      prompt: [requirement.title, requirement.prompt, requirement.scope, requirement.acceptance, requirement.techPreference].join("\n"),
+      system: agent.systemPrompt || "You are an AI PM/RD/QA delivery team for a Web project.",
+      prompt: [agent.userPrompt, requirement.title, requirement.prompt, requirement.scope, requirement.acceptance, requirement.techPreference].filter(Boolean).join("\n"),
       schema: "Return PRD, tasks, technical plan, code plan, QA checklist, deployment summary.",
     });
     const change = buildCodePatchSummary(requirement.title, plan.codePlan);
 
     await prisma.$transaction([
+      prisma.agent.update({ where: { id: agent.id }, data: { status: "IDLE" } }),
       prisma.requirement.update({ where: { id: requirementId }, data: { status: "PLANNED" } }),
       prisma.agentRun.update({ where: { id: run.id }, data: { status: "WAITING_APPROVAL", output: JSON.stringify(plan, null, 2) } }),
       prisma.agentRunStep.create({
@@ -487,7 +495,9 @@ export async function planRequirementWithAI(formData: FormData) {
         create: { projectId, filename: `requirements-${requirementId}.md`, title: `${requirement.title} PRD`, summary: plan.prd, content: JSON.stringify(plan, null, 2) },
       }),
       prisma.artifact.create({ data: { projectId, name: `${requirement.title} PRD`, type: "PRD", owner: agent.name, status: "DRAFT" } }),
-      prisma.artifact.create({ data: { projectId, name: `${requirement.title} QA checklist`, type: "QA Report", owner: "Iris", status: "DRAFT" } }),
+      prisma.artifact.create({ data: { projectId, name: `${requirement.title} TRD`, type: "Tech Spec", owner: "RD Agent", status: "DRAFT" } }),
+      prisma.artifact.create({ data: { projectId, name: `${requirement.title} UI design brief`, type: "Design", owner: "UI/UX Agent", status: "DRAFT" } }),
+      prisma.artifact.create({ data: { projectId, name: `${requirement.title} QA checklist`, type: "QA Report", owner: "QA Agent", status: "DRAFT" } }),
       prisma.codeChange.create({
         data: {
           projectId,
@@ -526,6 +536,7 @@ export async function planRequirementWithAI(formData: FormData) {
 
     await prisma.$transaction([
       prisma.requirement.update({ where: { id: requirementId }, data: { status: "BLOCKED" } }),
+      ...(agent ? [prisma.agent.update({ where: { id: agent.id }, data: { status: "IDLE" } })] : []),
       prisma.agentRun.update({ where: { id: run.id }, data: { status: "BLOCKED", error: message } }),
       prisma.agentRunStep.create({ data: { runId: run.id, name: "AI planning blocked", status: "BLOCKED", detail: message, error: message } }),
       prisma.ledgerEvent.create({ data: { projectId, title: "AI delivery blocked", detail: message, objectType: "AgentRun", objectId: run.id } }),
@@ -617,18 +628,21 @@ export async function generateCodePatch(formData: FormData) {
       throw new Error("No RD Agent API key configured.");
     }
 
+    await prisma.agent.update({ where: { id: agent.id }, data: { status: "WORKING" } });
+
     const plan = await generateStructured({
       provider: agent.provider,
       model: agent.model,
       apiKey,
-      system: "You are an AI RD Agent producing a reviewed code patch plan for a Next.js app.",
-      prompt: `${requirement.title}\n${requirement.prompt}\n${requirement.acceptance}`,
+      system: agent.systemPrompt || "You are an AI RD Agent producing a reviewed code patch plan for a Next.js app.",
+      prompt: [agent.userPrompt, requirement.title, requirement.prompt, requirement.acceptance].filter(Boolean).join("\n"),
       schema: "Return code plan and implementation summary.",
     });
     const change = buildCodePatchSummary(requirement.title, plan.codePlan);
 
     await prisma.$transaction([
       prisma.requirement.update({ where: { id: requirementId }, data: { status: "CODE_READY" } }),
+      prisma.agent.update({ where: { id: agent.id }, data: { status: "IDLE" } }),
       prisma.agentRun.update({ where: { id: run.id }, data: { status: "WAITING_APPROVAL", output: change.summary } }),
       prisma.agentRunStep.create({ data: { runId: run.id, name: "Code patch generated", status: "COMPLETED", detail: "AI generated code change plan for Boss approval.", output: change.summary } }),
       prisma.codeChange.updateMany({ where: { projectId, requirementId }, data: { runId: run.id, branch: change.branch, summary: change.summary, status: "GENERATED" } }),
@@ -652,6 +666,7 @@ export async function generateCodePatch(formData: FormData) {
     const message = error instanceof Error ? error.message : "Code generation failed.";
     await prisma.$transaction([
       prisma.requirement.update({ where: { id: requirementId }, data: { status: "BLOCKED" } }),
+      ...(agent ? [prisma.agent.update({ where: { id: agent.id }, data: { status: "IDLE" } })] : []),
       prisma.agentRun.update({ where: { id: run.id }, data: { status: "BLOCKED", error: message } }),
       prisma.agentRunStep.create({ data: { runId: run.id, name: "Code generation blocked", status: "BLOCKED", detail: message, error: message } }),
       prisma.ledgerEvent.create({ data: { projectId, title: "Code generation blocked", detail: message, objectType: "AgentRun", objectId: run.id } }),
@@ -918,41 +933,6 @@ export async function createProject(formData: FormData) {
     },
   });
 
-  const agents = [
-    { id: `pm-${project.id}`, name: "Mira", team: "PM", role: "PM Lead", status: "WORKING", provider: "gpt", model: "gpt-5.4", capabilities: "PRD\nUser Story\nAcceptance" },
-    { id: `rd-${project.id}`, name: "Kai", team: "RD", role: "RD Lead", status: "IDLE", provider: "claude", model: "claude-sonnet-4.5", capabilities: "Architecture\nCode Review\nBranch Strategy" },
-    { id: `qa-${project.id}`, name: "Iris", team: "QA", role: "QA Lead", status: "IDLE", provider: "gemini", model: "gemini-2.5-pro", capabilities: "Test Strategy\nBug Triage" },
-    { id: `ux-${project.id}`, name: "Lena", team: "UI/UX", role: "UI/UX Lead", status: "IDLE", provider: "minimax", model: "minimax-m1", capabilities: "Design Review\nInteraction Flow" },
-  ];
-
-  for (const agent of agents) {
-    await prisma.agent.upsert({
-      where: { id: agent.id },
-      update: {
-        name: agent.name,
-        team: agent.team,
-        role: agent.role,
-        status: agent.status as never,
-        provider: agent.provider,
-        model: agent.model,
-        capabilities: agent.capabilities,
-      },
-      create: {
-        id: agent.id,
-        name: agent.name,
-        team: agent.team,
-        role: agent.role,
-        status: agent.status as never,
-        provider: agent.provider,
-        model: agent.model,
-        capabilities: agent.capabilities,
-        projectAgents: {
-          create: { projectId: project.id },
-        },
-      },
-    });
-  }
-
   revalidatePath("/dashboard");
   revalidatePath("/projects");
   redirect(`/projects/${project.id}`);
@@ -1115,6 +1095,43 @@ export async function updateTaskStatus(formData: FormData) {
   ]);
 
   revalidateWorkspace(projectId, "tasks");
+}
+
+export async function reviewTaskApproval(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const taskId = text(formData, "taskId");
+  const decision = text(formData, "decision");
+  const note = text(formData, "note") || "No Boss note provided.";
+  const status = decision === "reject" ? "REJECTED" : "DONE";
+  const title = decision === "reject" ? "Task approval rejected" : "Task approval accepted";
+
+  await prisma.$transaction([
+    prisma.task.update({ where: { id: taskId }, data: { status: status as never } }),
+    prisma.review.create({
+      data: {
+        projectId,
+        type: "Boss Task Gate",
+        owner: "Boss",
+        result: decision === "reject" ? "NEEDS_CHANGE" : "PASS",
+        summary: `${taskId}: ${note}`,
+      },
+    }),
+    prisma.ledgerEvent.create({
+      data: {
+        projectId,
+        title,
+        detail: `${taskId}: ${note}`,
+        objectType: "Task",
+        objectId: taskId,
+      },
+    }),
+  ]);
+
+  revalidateWorkspace(projectId, "tasks");
+  revalidateWorkspace(projectId, "reviews");
+  revalidateWorkspace(projectId, "memory");
 }
 
 export async function updateDecisionStatus(formData: FormData) {
@@ -1342,11 +1359,24 @@ export async function assignAgentToProject(formData: FormData) {
     throw new Error("Agent not found.");
   }
 
+  if (agent.availability !== "ONLINE" || agent.status !== "IDLE") {
+    throw new Error("Only online and idle agents can be assigned to a project.");
+  }
+
+  const activeAssignment = await prisma.projectAgent.findFirst({
+    where: { agentId, status: "ACTIVE", projectId: { not: projectId } },
+    include: { project: true },
+  });
+
+  if (activeAssignment) {
+    throw new Error(`${agent.name} is already active in ${activeAssignment.project.name}. Release or force-stop that assignment first.`);
+  }
+
   await prisma.$transaction([
     prisma.projectAgent.upsert({
       where: { projectId_agentId: { projectId, agentId } },
-      update: {},
-      create: { projectId, agentId },
+      update: { status: "ACTIVE", summary: null, releasedAt: null, assignedAt: new Date() },
+      create: { projectId, agentId, status: "ACTIVE" },
     }),
     prisma.ledgerEvent.create({
       data: {
@@ -1361,14 +1391,124 @@ export async function assignAgentToProject(formData: FormData) {
   revalidatePath("/ai-organization");
 }
 
+export async function releaseProjectAgent(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const agentId = text(formData, "agentId");
+  const summary = text(formData, "summary") || "Project work completed; Agent returned to organization pool.";
+
+  const agent = await prisma.agent.findUnique({ where: { id: agentId } });
+
+  if (!projectId || !agent) {
+    throw new Error("Project and agent are required.");
+  }
+
+  await prisma.$transaction([
+    prisma.projectAgent.update({
+      where: { projectId_agentId: { projectId, agentId } },
+      data: { status: "RELEASED", summary, releasedAt: new Date() },
+    }),
+    prisma.agent.update({ where: { id: agentId }, data: { status: "IDLE" } }),
+    prisma.agentRun.create({
+      data: {
+        projectId,
+        agentId,
+        type: "HANDOVER",
+        status: "COMPLETED",
+        provider: "boss",
+        model: "manual-release",
+        input: summary,
+        output: summary,
+        steps: {
+          create: {
+            name: "Agent released",
+            status: "COMPLETED",
+            detail: summary,
+          },
+        },
+      },
+    }),
+    prisma.ledgerEvent.create({
+      data: {
+        projectId,
+        title: "Agent released",
+        detail: `${agent.name} returned to idle pool. Summary: ${summary}`,
+        objectType: "Agent",
+        objectId: agentId,
+      },
+    }),
+  ]);
+
+  revalidateWorkspace(projectId, "agents");
+  revalidateWorkspace(projectId, "activity");
+  revalidatePath("/ai-organization");
+}
+
+export async function forceStopProjectAgent(formData: FormData) {
+  requireDatabase();
+
+  const projectId = text(formData, "projectId");
+  const agentId = text(formData, "agentId");
+  const reason = text(formData, "reason") || "Boss force-stopped a suspected stuck Agent run.";
+  const agent = await prisma.agent.findUnique({ where: { id: agentId } });
+
+  if (!projectId || !agent) {
+    throw new Error("Project and agent are required.");
+  }
+
+  await prisma.$transaction([
+    prisma.projectAgent.update({
+      where: { projectId_agentId: { projectId, agentId } },
+      data: { status: "STOPPED", summary: reason, releasedAt: new Date() },
+    }),
+    prisma.agent.update({ where: { id: agentId }, data: { status: "IDLE" } }),
+    prisma.agentRun.updateMany({ where: { projectId, agentId, status: { in: ["QUEUED", "RUNNING", "WAITING_APPROVAL"] } }, data: { status: "BLOCKED", error: reason } }),
+    prisma.agentRun.create({
+      data: {
+        projectId,
+        agentId,
+        type: "CONTROL",
+        status: "BLOCKED",
+        provider: "boss",
+        model: "manual-force-stop",
+        input: reason,
+        error: reason,
+        steps: {
+          create: {
+            name: "Agent force stopped",
+            status: "BLOCKED",
+            detail: reason,
+            error: reason,
+          },
+        },
+      },
+    }),
+    prisma.ledgerEvent.create({
+      data: {
+        projectId,
+        title: "Agent force stopped",
+        detail: `${agent.name} was force-stopped by Boss. Reason: ${reason}`,
+        objectType: "Agent",
+        objectId: agentId,
+      },
+    }),
+  ]);
+
+  revalidateWorkspace(projectId, "agents");
+  revalidateWorkspace(projectId, "activity");
+  revalidatePath("/ai-organization");
+}
+
 export async function createGlobalAgent(formData: FormData) {
   requireDatabase();
 
   const name = text(formData, "name");
   const team = text(formData, "team") || "RD";
   const role = text(formData, "role") || `${team} Agent`;
-  const capabilities = text(formData, "capabilities");
-  const status = text(formData, "status") || "IDLE";
+  const systemPrompt = text(formData, "systemPrompt");
+  const userPrompt = text(formData, "userPrompt");
+  const availability = text(formData, "availability") === "OFFLINE" ? "OFFLINE" : "ONLINE";
   const provider = agentProvider(formData);
   const model = agentModel(formData, provider);
   const apiKey = encryptedOptional(text(formData, "apiKey"));
@@ -1382,8 +1522,11 @@ export async function createGlobalAgent(formData: FormData) {
       name,
       team,
       role,
-      capabilities,
-      status: status as never,
+      capabilities: "",
+      systemPrompt,
+      userPrompt,
+      availability,
+      status: "IDLE",
       provider,
       model,
       apiKey,
@@ -1403,8 +1546,10 @@ export async function updateGlobalAgent(formData: FormData) {
   const name = text(formData, "name");
   const team = text(formData, "team") || "RD";
   const role = text(formData, "role") || `${team} Agent`;
-  const capabilities = text(formData, "capabilities");
-  const status = text(formData, "status") || "IDLE";
+  const systemPrompt = text(formData, "systemPrompt");
+  const userPrompt = text(formData, "userPrompt");
+  const availability = text(formData, "availability") === "OFFLINE" ? "OFFLINE" : "ONLINE";
+  const status = text(formData, "status");
   const provider = agentProvider(formData);
   const model = agentModel(formData, provider);
   const rawApiKey = text(formData, "apiKey");
@@ -1419,6 +1564,7 @@ export async function updateGlobalAgent(formData: FormData) {
         apiKeyEncrypted: true,
       }
     : {};
+  const statusUpdate = status ? { status: status as never } : {};
 
   await prisma.$transaction([
     prisma.agent.update({
@@ -1427,10 +1573,12 @@ export async function updateGlobalAgent(formData: FormData) {
         name,
         team,
         role,
-        capabilities,
-        status: status as never,
+        systemPrompt,
+        userPrompt,
+        availability,
         provider,
         model,
+        ...statusUpdate,
         ...apiKeyUpdate,
       },
     }),

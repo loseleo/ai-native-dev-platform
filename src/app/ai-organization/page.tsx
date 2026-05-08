@@ -11,15 +11,7 @@ export default async function AiOrganizationPage() {
   const [agents, setup, projects] = await Promise.all([listAgents(), getSetupStatus(), listProjects()]);
   const canWrite = setup.databaseReady && !shell.demoMode;
   const teams = ["PM", "RD", "QA", "UI/UX"] as const;
-  const statuses = ["IDLE", "WORKING", "PAUSED", "BLOCKED", "UPGRADING"] as const;
   const providers = ["gpt", "gemini", "minimax", "claude"] as const;
-  const statusValue = {
-    Idle: "IDLE",
-    Working: "WORKING",
-    Paused: "PAUSED",
-    Blocked: "BLOCKED",
-    Upgrading: "UPGRADING",
-  } as const;
 
   return (
     <AppShell user={shell.user} setupLabel={shell.demoMode ? "Demo mode" : "Setup complete"} projects={projects}>
@@ -32,7 +24,7 @@ export default async function AiOrganizationPage() {
         <div className="flex justify-end">
           <CreateDialog
             title="Create Global Agent"
-            description="全局 Agent 先进入组织池，具体项目成员关系在 Project Workspace / Agents 管理。"
+            description="全局 Agent 只配置模型、密钥和 prompt；项目只能从在线且空闲的组织池借调。"
             trigger="Add Agent"
             disabled={!canWrite}
           >
@@ -71,15 +63,20 @@ export default async function AiOrganizationPage() {
               </div>
               <div className="grid gap-3 md:grid-cols-[1fr_160px]">
                 <div>
-                  <label className="text-sm font-semibold text-slate-700" htmlFor="capabilities">Capabilities</label>
-                  <input id="capabilities" name="capabilities" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500" placeholder="Next.js, Code Review, QA" />
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="systemPrompt">System Prompt</label>
+                  <textarea id="systemPrompt" name="systemPrompt" className="mt-2 min-h-24 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="Agent role, constraints, output quality bar" />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700" htmlFor="status">Status</label>
-                  <select id="status" name="status" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500">
-                    {statuses.map((status) => <option key={status}>{status}</option>)}
+                  <label className="text-sm font-semibold text-slate-700" htmlFor="availability">Availability</label>
+                  <select id="availability" name="availability" defaultValue="ONLINE" className="mt-2 h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-cyan-500">
+                    <option value="ONLINE">ONLINE</option>
+                    <option value="OFFLINE">OFFLINE</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-slate-700" htmlFor="userPrompt">User Prompt</label>
+                <textarea id="userPrompt" name="userPrompt" className="mt-2 min-h-20 w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-cyan-500" placeholder="Default task instruction injected into project runs" />
               </div>
               <div className="flex justify-end">
                 <button
@@ -93,7 +90,7 @@ export default async function AiOrganizationPage() {
             </form>
           </CreateDialog>
         </div>
-        <TableShell title="Global Agent Pool" description="Agent inventory across PM/RD/QA/UIUX, with project membership shown as references.">
+        <TableShell title="Global Agent Pool" description="组织池只管理在线/离线、模型和 prompt；Working/Idle 由项目运行记录驱动，不能在这里手动切换。">
           <DataTable
             rows={agents}
             getKey={(agent) => agent.id}
@@ -162,31 +159,53 @@ export default async function AiOrganizationPage() {
                 ),
               },
               {
-                header: "Status",
+                header: "Runtime",
                 cell: (agent) => (
                   <div className="space-y-2">
                     <StatusBadge value={agent.status} />
+                    <p className="text-xs text-slate-500">Project driven</p>
+                  </div>
+                ),
+              },
+              {
+                header: "Availability",
+                cell: (agent) => (
+                  <div className="space-y-2">
+                    <StatusBadge value={agent.availability} />
                     <select
-                      name="status"
+                      name="availability"
                       form={`agent-${agent.id}`}
-                      defaultValue={statusValue[agent.status]}
+                      defaultValue={agent.availability === "Offline" ? "OFFLINE" : "ONLINE"}
                       disabled={!canWrite}
                       className="block h-8 rounded-md border border-slate-200 px-2 text-xs outline-none focus:border-cyan-500 disabled:bg-slate-50"
                     >
-                      {statuses.map((status) => <option key={status}>{status}</option>)}
+                      <option value="ONLINE">ONLINE</option>
+                      <option value="OFFLINE">OFFLINE</option>
                     </select>
                   </div>
                 ),
               },
               {
-                header: "Capabilities",
+                header: "System Prompt",
                 cell: (agent) => (
                   <textarea
-                    name="capabilities"
+                    name="systemPrompt"
                     form={`agent-${agent.id}`}
-                    defaultValue={agent.capabilities.join("\n")}
+                    defaultValue={agent.systemPrompt}
                     disabled={!canWrite}
-                    className="min-h-16 w-72 rounded-md border border-slate-200 px-2 py-2 text-sm outline-none focus:border-cyan-500 disabled:bg-slate-50"
+                    className="min-h-16 w-80 rounded-md border border-slate-200 px-2 py-2 text-sm outline-none focus:border-cyan-500 disabled:bg-slate-50"
+                  />
+                ),
+              },
+              {
+                header: "User Prompt",
+                cell: (agent) => (
+                  <textarea
+                    name="userPrompt"
+                    form={`agent-${agent.id}`}
+                    defaultValue={agent.userPrompt}
+                    disabled={!canWrite}
+                    className="min-h-16 w-80 rounded-md border border-slate-200 px-2 py-2 text-sm outline-none focus:border-cyan-500 disabled:bg-slate-50"
                   />
                 ),
               },

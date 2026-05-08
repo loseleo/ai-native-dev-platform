@@ -60,9 +60,12 @@ export type Agent = {
   team: "PM" | "RD" | "QA" | "UI/UX";
   role: string;
   status: AgentStatus;
+  availability: "Online" | "Offline";
   provider: "gpt" | "gemini" | "minimax" | "claude";
   model: string;
   keyConfigured: boolean;
+  systemPrompt: string;
+  userPrompt: string;
   capabilities: string[];
   projectIds: string[];
 };
@@ -258,11 +261,11 @@ export const projects: Project[] = [
 ];
 
 export const agents: Agent[] = [
-  { id: "pm-lead", name: "Mira", team: "PM", role: "PM Lead", status: "Working", provider: "gpt", model: "gpt-5.4", keyConfigured: true, capabilities: ["PRD", "User Story", "Acceptance"], projectIds: ["web-os", "customer-portal"] },
-  { id: "rd-lead", name: "Kai", team: "RD", role: "RD Lead", status: "Working", provider: "claude", model: "claude-sonnet-4.5", keyConfigured: false, capabilities: ["Architecture", "Code Review", "Branch Strategy"], projectIds: ["web-os"] },
-  { id: "rd-1", name: "Nova", team: "RD", role: "RD Agent", status: "Blocked", provider: "gpt", model: "gpt-5.4", keyConfigured: true, capabilities: ["Next.js", "Prisma", "API"], projectIds: ["web-os"] },
-  { id: "qa-lead", name: "Iris", team: "QA", role: "QA Lead", status: "Idle", provider: "gemini", model: "gemini-2.5-pro", keyConfigured: false, capabilities: ["Test Strategy", "Bug Triage"], projectIds: ["web-os"] },
-  { id: "ux-lead", name: "Lena", team: "UI/UX", role: "UI/UX Lead", status: "Paused", provider: "minimax", model: "minimax-m1", keyConfigured: false, capabilities: ["Design Review", "Interaction Flow"], projectIds: ["web-os", "customer-portal"] },
+  { id: "pm-lead", name: "Mira", team: "PM", role: "PM Lead", status: "Working", availability: "Online", provider: "gpt", model: "gpt-5.4", keyConfigured: true, systemPrompt: "Act as PM lead. Produce PRD, plan, acceptance gates.", userPrompt: "Clarify product goals and keep Boss approvals explicit.", capabilities: ["PRD", "User Story", "Acceptance"], projectIds: ["web-os", "customer-portal"] },
+  { id: "rd-lead", name: "Kai", team: "RD", role: "RD Lead", status: "Working", availability: "Online", provider: "claude", model: "claude-sonnet-4.5", keyConfigured: false, systemPrompt: "Act as RD lead. Produce TRD, implementation plan, code review notes.", userPrompt: "Prefer Next.js, TypeScript, Tailwind, and small reviewable changes.", capabilities: ["Architecture", "Code Review", "Branch Strategy"], projectIds: ["web-os"] },
+  { id: "rd-1", name: "Nova", team: "RD", role: "RD Agent", status: "Blocked", availability: "Online", provider: "gpt", model: "gpt-5.4", keyConfigured: true, systemPrompt: "Implement scoped web changes with tests.", userPrompt: "Keep changes small and traceable.", capabilities: ["Next.js", "Prisma", "API"], projectIds: ["web-os"] },
+  { id: "qa-lead", name: "Iris", team: "QA", role: "QA Lead", status: "Idle", availability: "Online", provider: "gemini", model: "gemini-2.5-pro", keyConfigured: false, systemPrompt: "Act as QA lead. Produce test cases and acceptance checklist.", userPrompt: "Cover happy path, edge cases, mobile layout, and deployment checks.", capabilities: ["Test Strategy", "Bug Triage"], projectIds: ["web-os"] },
+  { id: "ux-lead", name: "Lena", team: "UI/UX", role: "UI/UX Lead", status: "Paused", availability: "Offline", provider: "minimax", model: "minimax-m1", keyConfigured: false, systemPrompt: "Act as UI/UX lead. Produce interaction and visual design notes.", userPrompt: "Prioritize dense modern backend UI.", capabilities: ["Design Review", "Interaction Flow"], projectIds: ["web-os", "customer-portal"] },
 ];
 
 export const tasks: Task[] = [

@@ -217,8 +217,11 @@ function mapAgent(agent: {
   provider?: string | null;
   model?: string | null;
   apiKey?: string | null;
+  availability?: string | null;
+  systemPrompt?: string | null;
+  userPrompt?: string | null;
   capabilities: string;
-  projectAgents?: { projectId: string }[];
+  projectAgents?: { projectId: string; status?: string | null }[];
 }): Agent {
   return {
     id: agent.id,
@@ -226,11 +229,14 @@ function mapAgent(agent: {
     team: agent.team as Agent["team"],
     role: agent.role,
     status: agentStatusToDisplay[agent.status] ?? "Idle",
+    availability: agent.availability === "OFFLINE" ? "Offline" : "Online",
     provider: (agent.provider ?? "gpt") as Agent["provider"],
     model: agent.model ?? "gpt-5.4",
     keyConfigured: Boolean(agent.apiKey),
+    systemPrompt: agent.systemPrompt ?? "",
+    userPrompt: agent.userPrompt ?? "",
     capabilities: safeJsonList(agent.capabilities),
-    projectIds: agent.projectAgents?.map((item) => item.projectId) ?? [],
+    projectIds: agent.projectAgents?.filter((item) => (item.status ?? "ACTIVE") === "ACTIVE").map((item) => item.projectId) ?? [],
   };
 }
 
@@ -505,7 +511,7 @@ export async function getWorkspaceData(projectId: string) {
         requirements: true,
         agentRuns: { include: { agent: true, steps: true }, orderBy: { createdAt: "desc" } },
         codeChanges: true,
-        projectAgents: { include: { agent: true } },
+        projectAgents: { where: { status: "ACTIVE" }, include: { agent: true } },
       },
     });
 
@@ -597,7 +603,7 @@ export async function getWorkspaceData(projectId: string) {
           status: artifact.status === "APPROVED" ? "Approved" : artifact.status === "ARCHIVED" ? "Archived" : "Draft",
         }),
       ),
-      agents: project.projectAgents.map((item) => mapAgent({ ...item.agent, projectAgents: [{ projectId }] })),
+      agents: project.projectAgents.map((item) => mapAgent({ ...item.agent, projectAgents: [{ projectId, status: item.status }] })),
     };
   } catch {
     return getSeedProjectData(projectId);
